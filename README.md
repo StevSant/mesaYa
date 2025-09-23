@@ -16,7 +16,7 @@ Plataforma web/móvil para restaurantes donde cada local puede crear un perfil c
 
 ## Integrantes
 
-* Menoscal Santana Bryan Steven | [GitHub](https://github.com/stevsant)
+* Menoscal Santana Bryan Steven | [GitHub](https://github.com/stevsant) | [LinkedIn](http://linkedin.com/in/bryanmenoscal26)
 
 * Muñiz Rivas Miquel Leopoldo | [GitHub](https://github.com/lesquel)
 

@@ -1,3 +1,6 @@
 [submodule "mesaYa_frontend"]
 	path = mesaYa_frontend
 	url = https://github.com/StevSant/mesaYa_frontend.git
+[submodule "mesaYA_Res"]
+	path = mesaYA_Res
+	url = https://github.com/lesquel/mesaYa_Res.git

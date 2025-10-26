@@ -7,3 +7,6 @@
 	path = mesaYA_Res
 	url = https://github.com/lesquel/mesaYa_Res.git
   branch = main
+[submodule "mesaYA_graphql"]
+	path = mesaYA_graphql
+	url = https://github.com/StevSant/mesaYA_graphql.git

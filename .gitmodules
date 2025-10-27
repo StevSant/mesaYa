@@ -10,3 +10,6 @@
 [submodule "mesaYA_graphql"]
 	path = mesaYA_graphql
 	url = https://github.com/StevSant/mesaYA_graphql.git
+[submodule "mesaYA_ws"]
+	path = mesaYA_ws
+	url = https://github.com/GINGERPEREZ/websocket.git

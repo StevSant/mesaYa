@@ -13,3 +13,6 @@
 [submodule "mesaYA_ws"]
 	path = mesaYA_ws
 	url = https://github.com/GINGERPEREZ/websocket.git
+[submodule "mesaYA_chatbot_service"]
+	path = mesaYA_chatbot_service
+	url = https://github.com/StevSant/mesaYA_chatbot_service.git

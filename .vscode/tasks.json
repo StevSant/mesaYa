@@ -1,0 +1,122 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "🐳 Kafka (Docker)",
+      "type": "shell",
+      "command": "docker compose up",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "🎨 Frontend (Angular)",
+      "type": "shell",
+      "command": "ng serve",
+      "options": {
+        "cwd": "${workspaceFolder}/mesaYA_frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "🔧 Backend (NestJS)",
+      "type": "shell",
+      "command": "nest start",
+      "options": {
+        "cwd": "${workspaceFolder}/mesaYA_Res"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "📊 GraphQL (Strawberry)",
+      "type": "shell",
+      "command": "uv run app",
+      "options": {
+        "cwd": "${workspaceFolder}/mesaYA_graphql"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "🤖 Chatbot (FastAPI)",
+      "type": "shell",
+      "command": "uv run app",
+      "options": {
+        "cwd": "${workspaceFolder}/mesaYA_chatbot_service"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "🔌 WebSocket (Go)",
+      "type": "shell",
+      "command": "go run ./cmd/server/main.go",
+      "options": {
+        "cwd": "${workspaceFolder}/mesaYA_ws"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "🚀 Iniciar TODOS los servicios",
+      "dependsOn": [
+        "🐳 Kafka (Docker)",
+        "🎨 Frontend (Angular)",
+        "🔧 Backend (NestJS)",
+        "📊 GraphQL (Strawberry)",
+        "🤖 Chatbot (FastAPI)",
+        "🔌 WebSocket (Go)"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "runOptions": {
+        "runOn": "default"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "⏹️ Detener Kafka (Docker)",
+      "type": "shell",
+      "command": "docker compose down",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

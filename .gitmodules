@@ -16,3 +16,6 @@
 [submodule "mesaYA_chatbot_service"]
 	path = mesaYA_chatbot_service
 	url = https://github.com/StevSant/mesaYA_chatbot_service.git
+[submodule "mesaYA_mcp"]
+	path = mesaYA_mcp
+	url = https://github.com/StevSant/mesaYA_mcp.git

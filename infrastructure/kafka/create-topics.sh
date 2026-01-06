@@ -45,7 +45,23 @@ TOPICS=(
   "mesa-ya.owner-upgrade.events"    # Eventos de solicitudes de upgrade a owner
 )
 
-echo "Creando ${#TOPICS[@]} topics..."
+# Topics de Auth MS para comunicación request/reply (Gateway <-> Auth MS)
+AUTH_TOPICS=(
+  "auth.sign-up"
+  "auth.sign-up.reply"
+  "auth.login"
+  "auth.login.reply"
+  "auth.refresh-token"
+  "auth.refresh-token.reply"
+  "auth.logout"
+  "auth.logout.reply"
+  "auth.find-user-by-id"
+  "auth.find-user-by-id.reply"
+  "auth.find-user-by-email"
+  "auth.find-user-by-email.reply"
+)
+
+echo "Creando ${#TOPICS[@]} topics de eventos..."
 echo ""
 
 for topic in "${TOPICS[@]}"; do
@@ -60,12 +76,32 @@ for topic in "${TOPICS[@]}"; do
 done
 
 echo ""
+echo "Creando ${#AUTH_TOPICS[@]} topics de Auth MS (request/reply)..."
+echo ""
+
+for topic in "${AUTH_TOPICS[@]}"; do
+  echo "  → Creando topic: ${topic}"
+  /opt/kafka/bin/kafka-topics.sh \
+    --bootstrap-server "${BOOTSTRAP_SERVER}" \
+    --create \
+    --if-not-exists \
+    --topic "${topic}" \
+    --partitions 1 \
+    --replication-factor 1
+done
+
+echo ""
 echo "=============================================="
 echo "  ✓ Todos los topics han sido creados"
 echo "=============================================="
 echo ""
-echo "Topics disponibles:"
+echo "Topics de eventos disponibles:"
 for topic in "${TOPICS[@]}"; do
+  echo "  - ${topic}"
+done
+echo ""
+echo "Topics de Auth MS (request/reply):"
+for topic in "${AUTH_TOPICS[@]}"; do
   echo "  - ${topic}"
 done
 echo ""

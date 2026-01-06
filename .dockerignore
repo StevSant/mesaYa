@@ -1,0 +1,46 @@
+# Dependencies
+**/node_modules
+**/.pnpm-store
+
+# Build outputs
+**/dist
+**/.next
+**/out
+**/build
+
+# TypeScript build info
+**/*.tsbuildinfo
+
+# Git
+.git
+.gitignore
+.gitmodules
+
+# IDE
+.vscode
+.idea
+**/*.swp
+**/*.swo
+
+# Logs
+**/logs
+**/*.log
+**/npm-debug.log*
+
+# Test
+**/coverage
+**/.nyc_output
+
+# Python
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.egg-info
+
+# Misc
+**/.DS_Store
+**/Thumbs.db
+**/.env.local
+**/.env.*.local

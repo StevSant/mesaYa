@@ -73,46 +73,6 @@ services:
       - mesaya-network
     restart: "no"
 
-  # ---------------------------------------------------------------------------
-  # Auth Microservice (JWT signing, user management)
-  # ---------------------------------------------------------------------------
-  auth:
-    build:
-      context: .
-      dockerfile: mesaYA_auth_ms/Dockerfile
-    container_name: mesaya-auth-ms
-    depends_on:
-      kafka:
-        condition: service_healthy
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      AUTH_MS_PORT: 3001
-      # Kafka
-      KAFKA_BROKERS: kafka:9092
-      # Database (Auth MS uses separate Supabase DB)
-      AUTH_PG_HOST: ${AUTH_PG_HOST}
-      AUTH_PG_PORT: ${AUTH_PG_PORT:-5432}
-      AUTH_PG_USER: ${AUTH_PG_USER}
-      AUTH_PG_PASSWORD: ${AUTH_PG_PASSWORD}
-      AUTH_PG_DATABASE: ${AUTH_PG_DATABASE}
-      AUTH_PG_SSL: ${AUTH_PG_SSL:-true}
-      # JWT RS256 Keys
-      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
-      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-    ports:
-      - "3001:3001"   # Health check / debug endpoint
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    networks:
-      - mesaya-network
-    restart: unless-stopped
-
 # -----------------------------------------------------------------------------
 # Red compartida para todos los microservicios
 # -----------------------------------------------------------------------------

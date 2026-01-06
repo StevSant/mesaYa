@@ -19,3 +19,6 @@
 [submodule "mesaYA_mcp"]
 	path = mesaYA_mcp
 	url = https://github.com/StevSant/mesaYA_mcp.git
+[submodule "mesaYA_auth_ms"]
+	path = mesaYA_auth_ms
+	url = https://github.com/StevSant/mesaYA_auth_ms.git

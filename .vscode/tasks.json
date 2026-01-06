@@ -16,11 +16,11 @@
       }
     },
     {
-      "label": "🎨 Frontend (Angular)",
+      "label": "🔐 Auth Microservice (NestJS)",
       "type": "shell",
-      "command": "ng serve",
+      "command": "nest start",
       "options": {
-        "cwd": "${workspaceFolder}/mesaYA_frontend"
+        "cwd": "${workspaceFolder}/mesaYA_auth_ms"
       },
       "isBackground": true,
       "problemMatcher": [],
@@ -86,14 +86,30 @@
       }
     },
     {
+      "label": "🎨 Frontend (Angular)",
+      "type": "shell",
+      "command": "ng serve",
+      "options": {
+        "cwd": "${workspaceFolder}/mesaYA_frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+
+    {
       "label": "🚀 Iniciar TODOS los servicios",
       "dependsOn": [
         "🐳 Kafka (Docker)",
-        "🎨 Frontend (Angular)",
+        "🔐 Auth Microservice (NestJS)",
         "🔧 Backend (NestJS)",
         "📊 GraphQL (Strawberry)",
         "🤖 Chatbot (FastAPI)",
-        "🔌 WebSocket (Go)"
+        "🔌 WebSocket (Go)",
+        "🎨 Frontend (Angular)",
       ],
       "dependsOrder": "parallel",
       "problemMatcher": [],

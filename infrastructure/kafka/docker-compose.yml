@@ -1,0 +1,121 @@
+# =============================================================================
+# MesaYA - Kafka Infrastructure
+# =============================================================================
+# Configuración completa de Apache Kafka en modo KRaft (sin Zookeeper).
+#
+# Uso standalone:
+#   cd infrastructure/kafka
+#   docker compose up -d             # Levantar Kafka
+#   docker compose --profile ui up   # Levantar Kafka + UI
+#   docker compose down              # Detener Kafka
+#   docker compose logs -f kafka     # Ver logs
+#
+# Uso desde raíz (recomendado):
+#   docker compose up -d kafka       # Levanta Kafka + inicializador
+#
+# Puertos:
+#   - 9092:  Comunicación interna (contenedores)
+#   - 29092: Comunicación externa (localhost)
+#   - 8090:  Kafka UI (solo con profile 'ui')
+#
+# Variables de entorno: Ver .env.example en la raíz del proyecto
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Apache Kafka (KRaft mode - sin Zookeeper)
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:${KAFKA_VERSION:-3.9.0}
+    hostname: kafka
+    container_name: mesaya-kafka
+    environment:
+      # Configuración KRaft (sin Zookeeper)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      # Listeners
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Configuración de replicación (desarrollo - 1 nodo)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_REPLICATION_FACTOR:-1}
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: ${KAFKA_REPLICATION_FACTOR:-1}
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # Cluster ID (requerido para KRaft)
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+      - "${KAFKA_EXTERNAL_PORT:-29092}:29092"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - mesaya-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Inicializador de Topics de Kafka
+  # ---------------------------------------------------------------------------
+  kafka-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mesaya-kafka-init:latest
+    container_name: mesaya-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    networks:
+      - mesaya-network
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Kafka UI (Opcional - activar con: docker compose --profile ui up)
+  # ---------------------------------------------------------------------------
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: mesaya-kafka-ui
+    profiles:
+      - ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: ${KAFKA_UI_CLUSTER_NAME:-mesaya-local}
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "${KAFKA_UI_PORT:-8090}:8080"
+    networks:
+      - mesaya-network
+    restart: unless-stopped
+
+# -----------------------------------------------------------------------------
+# Red compartida para todos los servicios MesaYA
+# -----------------------------------------------------------------------------
+networks:
+  mesaya-network:
+    name: mesaya-network
+    external: true
+
+# -----------------------------------------------------------------------------
+# Volúmenes persistentes
+# -----------------------------------------------------------------------------
+volumes:
+  kafka-data:
+    name: mesaya-kafka-data
+    external: true

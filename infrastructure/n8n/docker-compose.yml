@@ -1,0 +1,125 @@
+# =============================================================================
+# MesaYA - n8n Workflow Automation Infrastructure
+# =============================================================================
+# Configuración completa de n8n para automatización de workflows.
+#
+# Uso standalone:
+#   cd infrastructure/n8n
+#   docker compose up -d         # Levantar n8n
+#   docker compose down          # Detener n8n
+#   docker compose logs -f n8n   # Ver logs
+#
+# Uso desde raíz (recomendado):
+#   docker compose up -d n8n     # Levanta n8n + dependencias (Kafka)
+#
+# Acceso:
+#   - UI: http://localhost:5678
+#   - Usuario: admin (configurable con N8N_BASIC_AUTH_USER)
+#   - Contraseña: mesaya_n8n_2024 (configurable con N8N_PASSWORD)
+#
+# Variables de entorno: Ver .env.example en la raíz del proyecto
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # n8n - Workflow Automation Engine
+  # ---------------------------------------------------------------------------
+  n8n:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mesaya-n8n:latest
+    container_name: mesaya-n8n
+    # Nota: Kafka debe estar corriendo antes de iniciar n8n
+    # Usar: docker compose -f infrastructure/kafka/docker-compose.yml up -d
+    # O levantar desde el docker-compose.yml raíz que incluye ambos
+    environment:
+      # Configuración de red
+      N8N_HOST: 0.0.0.0
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+
+      # Timezone
+      GENERIC_TIMEZONE: ${TZ:-America/Guayaquil}
+      TZ: ${TZ:-America/Guayaquil}
+
+      # Autenticación
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-mesaya_n8n_2024}
+
+      # Seguridad - Clave de encriptación para credenciales
+      # IMPORTANTE: Generar con: openssl rand -hex 32
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-cambiar_esta_clave_en_produccion_32chars}
+
+      # Configuración de ejecuciones
+      EXECUTIONS_MODE: regular
+      EXECUTIONS_TIMEOUT: 300
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 336
+
+      # Base de datos (SQLite para desarrollo, PostgreSQL para producción)
+      DB_TYPE: sqlite
+
+      # Logs
+      N8N_LOG_LEVEL: ${N8N_LOG_LEVEL:-info}
+      N8N_LOG_OUTPUT: console
+
+      # Métricas (Prometheus)
+      N8N_METRICS: "true"
+      N8N_METRICS_PREFIX: n8n_
+
+      # Deshabilitar telemetría
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+
+      # Nodos comunitarios
+      N8N_COMMUNITY_PACKAGES_ENABLED: "true"
+      NODE_FUNCTION_ALLOW_BUILTIN: "*"
+      NODE_FUNCTION_ALLOW_EXTERNAL: "*"
+
+      # URLs de servicios MesaYA (para workflows)
+      MESAYA_API_URL: ${MESAYA_API_URL:-http://host.docker.internal:3000}
+      MESAYA_GRAPHQL_URL: ${MESAYA_GRAPHQL_URL:-http://host.docker.internal:8000/graphql}
+      MESAYA_WS_URL: ${MESAYA_WS_URL:-ws://host.docker.internal:8080}
+      MESAYA_CHATBOT_URL: ${MESAYA_CHATBOT_URL:-http://host.docker.internal:8001}
+
+      # Kafka
+      MESAYA_KAFKA_BROKERS: kafka:9092
+    ports:
+      - "5678:5678"
+    volumes:
+      # Persistencia de datos de n8n
+      - n8n-data:/home/node/.n8n
+      # Workflows compartidos (para importar/exportar)
+      - ./workflows:/home/node/workflows:ro
+    networks:
+      - mesaya-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    # Necesario para acceder a servicios en el host desde dentro del contenedor
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+# -----------------------------------------------------------------------------
+# Red compartida (se conecta a la red de Kafka)
+# -----------------------------------------------------------------------------
+networks:
+  mesaya-network:
+    name: mesaya-network
+    external: true
+
+# -----------------------------------------------------------------------------
+# Volúmenes persistentes
+# -----------------------------------------------------------------------------
+volumes:
+  n8n-data:
+    name: mesaya-n8n-data

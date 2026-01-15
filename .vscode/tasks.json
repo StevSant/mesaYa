@@ -4,9 +4,23 @@
     {
       "label": "🐳 Kafka (Docker)",
       "type": "shell",
-      "command": "docker compose up",
+      "command": "docker compose up -d && docker compose logs -f",
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}/infrastructure/kafka"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "⚙️ n8n (Docker)",
+      "type": "shell",
+      "command": "docker compose up -d && docker compose logs -f",
+      "options": {
+        "cwd": "${workspaceFolder}/infrastructure/n8n"
       },
       "isBackground": true,
       "problemMatcher": [],
@@ -99,17 +113,17 @@
         "panel": "new"
       }
     },
-
     {
       "label": "🚀 Iniciar TODOS los servicios",
       "dependsOn": [
         "🐳 Kafka (Docker)",
+        "⚙️ n8n (Docker)",
         "🔐 Auth Microservice (NestJS)",
         "🔧 Backend (NestJS)",
         "📊 GraphQL (Strawberry)",
         "🤖 Chatbot (FastAPI)",
         "🔌 WebSocket (Go)",
-        "🎨 Frontend (Angular)",
+        "🎨 Frontend (Angular)"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": [],
@@ -122,12 +136,51 @@
       }
     },
     {
+      "label": "🚀 Iniciar Infraestructura (Kafka + n8n)",
+      "dependsOn": [
+        "🐳 Kafka (Docker)",
+        "⚙️ n8n (Docker)"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
       "label": "⏹️ Detener Kafka (Docker)",
       "type": "shell",
       "command": "docker compose down",
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}/infrastructure/kafka"
       },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "⏹️ Detener n8n (Docker)",
+      "type": "shell",
+      "command": "docker compose down",
+      "options": {
+        "cwd": "${workspaceFolder}/infrastructure/n8n"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "⏹️ Detener TODA la Infraestructura",
+      "dependsOn": [
+        "⏹️ Detener n8n (Docker)",
+        "⏹️ Detener Kafka (Docker)"
+      ],
+      "dependsOrder": "sequence",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",

@@ -1,89 +1,42 @@
 # =============================================================================
-# MesaYA - Infraestructura Compartida (Kafka + Auth MS)
+# MesaYA - Docker Compose Principal (Orquestador)
 # =============================================================================
-# Este archivo levanta la infraestructura base que todos los microservicios
-# necesitan. Ejecutar ANTES de levantar los servicios individuales.
+# Este archivo orquesta toda la infraestructura de MesaYA usando módulos.
+# Cada servicio tiene su propia configuración en ./infrastructure/
 #
 # Uso:
-#   docker compose up -d          # Levantar Kafka y Auth MS
-#   docker compose down           # Detener servicios
-#   docker compose logs -f kafka  # Ver logs de Kafka
-#   docker compose logs -f auth   # Ver logs de Auth MS
+#   docker compose up -d              # Levantar toda la infraestructura
+#   docker compose up -d kafka        # Levantar solo Kafka
+#   docker compose up -d n8n          # Levantar solo n8n
+#   docker compose down               # Detener todo
+#   docker compose --profile ui up -d # Incluir UIs de desarrollo
+#
+# Estructura modular:
+#   ./infrastructure/kafka/   → Configuración completa de Apache Kafka
+#   ./infrastructure/n8n/     → Configuración completa de n8n
+#
+# Los microservicios (NestJS, Go, Python) se levantan por separado
+# usando las tasks de VS Code en .vscode/tasks.json
 # =============================================================================
 
-services:
-  # ---------------------------------------------------------------------------
-  # Apache Kafka (KRaft mode - sin Zookeeper)
-  # ---------------------------------------------------------------------------
-  kafka:
-    image: apache/kafka:3.9.0
-    hostname: kafka
-    container_name: mesaya-kafka
-    environment:
-      # Configuración KRaft (sin Zookeeper)
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-
-      # Listeners
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-
-      # Configuración de replicación (desarrollo - 1 nodo)
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-
-      # Cluster ID (requerido para KRaft)
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
-    ports:
-      - "9092:9092"     # Comunicación interna entre contenedores
-      - "29092:29092"   # Comunicación desde host (localhost)
-    healthcheck:
-      test: ["CMD", "bash", "-c", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-    volumes:
-      - kafka-data:/var/lib/kafka/data
-    networks:
-      - mesaya-network
-    restart: unless-stopped
-
-  # ---------------------------------------------------------------------------
-  # Inicializador de Topics de Kafka
-  # ---------------------------------------------------------------------------
-  kafka-init:
-    image: apache/kafka:3.9.0
-    container_name: mesaya-kafka-init
-    depends_on:
-      kafka:
-        condition: service_healthy
-    volumes:
-      - ./infrastructure/kafka/create-topics.sh:/opt/kafka-init/create-topics.sh:ro
-    entrypoint: ["/bin/bash", "/opt/kafka-init/create-topics.sh"]
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    networks:
-      - mesaya-network
-    restart: "no"
+# -----------------------------------------------------------------------------
+# Incluir módulos de infraestructura
+# -----------------------------------------------------------------------------
+include:
+  - path: ./infrastructure/kafka/docker-compose.yml
+  - path: ./infrastructure/n8n/docker-compose.yml
 
 # -----------------------------------------------------------------------------
-# Red compartida para todos los microservicios
+# Recursos compartidos (creados por el orquestador)
+# Estos recursos son usados por los módulos con external: true
 # -----------------------------------------------------------------------------
 networks:
   mesaya-network:
     name: mesaya-network
     driver: bridge
 
-# -----------------------------------------------------------------------------
-# Volúmenes persistentes
-# -----------------------------------------------------------------------------
 volumes:
-  kafka-data:
+  mesaya-kafka-data:
     name: mesaya-kafka-data
+  mesaya-n8n-data:
+    name: mesaya-n8n-data

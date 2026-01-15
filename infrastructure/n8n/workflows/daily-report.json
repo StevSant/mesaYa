@@ -1,0 +1,220 @@
+{
+  "name": "MesaYA - Reporte Diario de Reservaciones",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Diariamente a las 8:00 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MESAYA_API_URL }}/restaurants",
+        "options": {}
+      },
+      "id": "get-restaurants",
+      "name": "Obtener Restaurantes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "={{ $json.data || $json }}",
+        "options": {}
+      },
+      "id": "split-restaurants",
+      "name": "Separar Restaurantes",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MESAYA_API_URL }}/reservations",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "restaurantId",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "date",
+              "value": "={{ $now.toISODate() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-daily-reservations",
+      "name": "Reservaciones del Día",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar resumen del restaurante\nconst restaurant = $('Separar Restaurantes').first().json;\nconst reservationsResponse = $input.first().json;\nconst reservations = reservationsResponse.data || reservationsResponse || [];\n\nconst totalReservations = reservations.length;\nconst totalGuests = reservations.reduce((sum, r) => sum + (r.partySize || r.party_size || 0), 0);\n\n// Agrupar por estado\nconst byStatus = reservations.reduce((acc, r) => {\n  const status = r.status || 'UNKNOWN';\n  acc[status] = (acc[status] || 0) + 1;\n  return acc;\n}, {});\n\n// Agrupar por hora\nconst byHour = reservations.reduce((acc, r) => {\n  const hour = r.time?.split(':')[0] || 'Unknown';\n  acc[hour] = (acc[hour] || 0) + 1;\n  return acc;\n}, {});\n\nreturn {\n  restaurantId: restaurant.id,\n  restaurantName: restaurant.name,\n  ownerEmail: restaurant.ownerEmail || restaurant.owner_email,\n  date: new Date().toISOString().split('T')[0],\n  summary: {\n    totalReservations,\n    totalGuests,\n    byStatus,\n    byHour,\n    peakHour: Object.entries(byHour).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'\n  },\n  reservations: reservations.map(r => ({\n    id: r.id,\n    time: r.time,\n    customerName: r.customerName || r.customer_name,\n    partySize: r.partySize || r.party_size,\n    status: r.status\n  }))\n};"
+      },
+      "id": "generate-summary",
+      "name": "Generar Resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.summary.totalReservations }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "leftValue": "={{ $json.ownerEmail }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-with-reservations",
+      "name": "¿Tiene Reservaciones?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "reportes@mesaya.com",
+        "toEmail": "={{ $json.ownerEmail }}",
+        "subject": "📊 Reporte Diario - {{ $json.restaurantName }} ({{ $json.date }})",
+        "emailType": "html",
+        "html": "<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 700px; margin: 0 auto; padding: 20px; }\n    .header { background: #8B5CF6; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }\n    .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }\n    .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }\n    .stat-card { background: white; padding: 15px; border-radius: 8px; text-align: center; }\n    .stat-value { font-size: 32px; font-weight: bold; color: #8B5CF6; }\n    .stat-label { color: #6B7280; font-size: 14px; }\n    table { width: 100%; border-collapse: collapse; margin: 20px 0; }\n    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }\n    th { background: #f3f4f6; font-weight: bold; }\n    .status-confirmed { color: #10B981; }\n    .status-pending { color: #F59E0B; }\n    .status-cancelled { color: #EF4444; }\n    .footer { text-align: center; margin-top: 20px; color: #6B7280; font-size: 12px; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>📊 Reporte Diario</h1>\n      <p>{{ $json.restaurantName }} - {{ $json.date }}</p>\n    </div>\n    <div class=\"content\">\n      <div class=\"stat-grid\">\n        <div class=\"stat-card\">\n          <div class=\"stat-value\">{{ $json.summary.totalReservations }}</div>\n          <div class=\"stat-label\">Reservaciones</div>\n        </div>\n        <div class=\"stat-card\">\n          <div class=\"stat-value\">{{ $json.summary.totalGuests }}</div>\n          <div class=\"stat-label\">Comensales</div>\n        </div>\n        <div class=\"stat-card\">\n          <div class=\"stat-value\">{{ $json.summary.peakHour }}:00</div>\n          <div class=\"stat-label\">Hora Pico</div>\n        </div>\n        <div class=\"stat-card\">\n          <div class=\"stat-value\">{{ $json.summary.byStatus.CONFIRMED || 0 }}</div>\n          <div class=\"stat-label\">Confirmadas</div>\n        </div>\n      </div>\n      \n      <h3>📋 Detalle de Reservaciones</h3>\n      <table>\n        <thead>\n          <tr>\n            <th>Hora</th>\n            <th>Cliente</th>\n            <th>Personas</th>\n            <th>Estado</th>\n          </tr>\n        </thead>\n        <tbody>\n          {{#each $json.reservations}}\n          <tr>\n            <td>{{ this.time }}</td>\n            <td>{{ this.customerName }}</td>\n            <td>{{ this.partySize }}</td>\n            <td class=\"status-{{ this.status.toLowerCase() }}\">{{ this.status }}</td>\n          </tr>\n          {{/each}}\n        </tbody>\n      </table>\n      \n      <p>¡Que tengas un excelente día!</p>\n    </div>\n    <div class=\"footer\">\n      <p>MesaYA - Reporte generado automáticamente</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {}
+      },
+      "id": "send-report",
+      "name": "Enviar Reporte",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Diariamente a las 8:00 AM": {
+      "main": [
+        [
+          {
+            "node": "Obtener Restaurantes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Restaurantes": {
+      "main": [
+        [
+          {
+            "node": "Separar Restaurantes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar Restaurantes": {
+      "main": [
+        [
+          {
+            "node": "Reservaciones del Día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reservaciones del Día": {
+      "main": [
+        [
+          {
+            "node": "Generar Resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Resumen": {
+      "main": [
+        [
+          {
+            "node": "¿Tiene Reservaciones?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tiene Reservaciones?": {
+      "main": [
+        [
+          {
+            "node": "Enviar Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "reports",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "scheduled",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "active": false,
+  "meta": {
+    "instanceId": "mesaya-n8n"
+  }
+}

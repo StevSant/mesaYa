@@ -1,0 +1,309 @@
+{
+  "name": "MesaYA - Kafka Consumer (Eventos de Reservaciones)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Polling Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "notes": "Polling cada 30 segundos para consumir mensajes de Kafka. En producción, considerar usar un trigger de Kafka nativo."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://kafka:8082/consumers/n8n-reservation-consumer/instances/n8n-instance/records",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.kafka.json.v2+json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "kafka-consume",
+      "name": "Consumir de Kafka",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "notes": "Requiere Kafka REST Proxy configurado. Alternativa: usar n8n community node para Kafka."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-empty",
+      "name": "Filtrar Vacíos",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "={{ $json }}",
+        "options": {}
+      },
+      "id": "split-messages",
+      "name": "Separar Mensajes",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear el mensaje de Kafka\nconst item = $input.first().json;\n\n// El valor del mensaje de Kafka viene en base64 o como objeto\nlet message;\ntry {\n  if (typeof item.value === 'string') {\n    message = JSON.parse(Buffer.from(item.value, 'base64').toString());\n  } else {\n    message = item.value;\n  }\n} catch (e) {\n  message = item.value;\n}\n\nreturn {\n  topic: item.topic,\n  partition: item.partition,\n  offset: item.offset,\n  timestamp: item.timestamp,\n  event_type: message.event_type,\n  entity_id: message.entity_id,\n  data: message.data,\n  metadata: message.metadata\n};"
+      },
+      "id": "parse-message",
+      "name": "Parsear Mensaje Kafka",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Creada"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "status_changed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Estado Cambiado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "cancelled",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Cancelada"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-event-type",
+      "name": "Tipo de Evento",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log del evento procesado\nconst event = $input.first().json;\n\nconsole.log(`[MesaYA] Reservación CREADA: ${event.entity_id}`);\nconsole.log(`  - Cliente: ${event.data?.customer_name}`);\nconsole.log(`  - Restaurante: ${event.data?.restaurant_id}`);\nconsole.log(`  - Fecha: ${event.data?.date} ${event.data?.time}`);\n\nreturn {\n  action: 'reservation_created',\n  ...event\n};"
+      },
+      "id": "handle-created",
+      "name": "Procesar Creación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log del evento procesado\nconst event = $input.first().json;\n\nconsole.log(`[MesaYA] Reservación ESTADO CAMBIADO: ${event.entity_id}`);\nconsole.log(`  - Nuevo estado: ${event.data?.status}`);\n\nreturn {\n  action: 'reservation_status_changed',\n  ...event\n};"
+      },
+      "id": "handle-status-changed",
+      "name": "Procesar Cambio Estado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log del evento procesado\nconst event = $input.first().json;\n\nconsole.log(`[MesaYA] Reservación CANCELADA: ${event.entity_id}`);\nconsole.log(`  - Razón: ${event.data?.cancellation_reason || 'No especificada'}`);\n\nreturn {\n  action: 'reservation_cancelled',\n  ...event\n};"
+      },
+      "id": "handle-cancelled",
+      "name": "Procesar Cancelación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 420]
+    }
+  ],
+  "connections": {
+    "Polling Trigger": {
+      "main": [
+        [
+          {
+            "node": "Consumir de Kafka",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consumir de Kafka": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Vacíos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Vacíos": {
+      "main": [
+        [
+          {
+            "node": "Separar Mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar Mensajes": {
+      "main": [
+        [
+          {
+            "node": "Parsear Mensaje Kafka",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Mensaje Kafka": {
+      "main": [
+        [
+          {
+            "node": "Tipo de Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo de Evento": {
+      "main": [
+        [
+          {
+            "node": "Procesar Creación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Procesar Cambio Estado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Procesar Cancelación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "kafka",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "reservations",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "active": false,
+  "meta": {
+    "instanceId": "mesaya-n8n"
+  }
+}

@@ -1,0 +1,281 @@
+{
+  "name": "MesaYA - Recordatorio de Reservación (24h antes)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Cada Hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MESAYA_API_URL }}/reservations",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "CONFIRMED"
+            },
+            {
+              "name": "dateFrom",
+              "value": "={{ $now.plus({hours: 23}).toISODate() }}"
+            },
+            {
+              "name": "dateTo",
+              "value": "={{ $now.plus({hours: 25}).toISODate() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-reservations",
+      "name": "Obtener Reservaciones (próximas 24h)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.data?.length || $json.length || 0 }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-empty",
+      "name": "¿Hay Reservaciones?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "={{ $json.data || $json }}",
+        "options": {}
+      },
+      "id": "split-reservations",
+      "name": "Separar Reservaciones",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verificar si ya se envió recordatorio (usando metadata)\nconst reservation = $input.first().json;\n\n// Calcular tiempo hasta la reservación\nconst reservationDateTime = new Date(`${reservation.date}T${reservation.time}`);\nconst now = new Date();\nconst hoursUntil = (reservationDateTime - now) / (1000 * 60 * 60);\n\n// Solo enviar si está entre 23 y 25 horas\nconst shouldSendReminder = hoursUntil >= 23 && hoursUntil <= 25;\n\nreturn {\n  ...reservation,\n  hoursUntilReservation: Math.round(hoursUntil),\n  shouldSendReminder,\n  reservationDateTime: reservationDateTime.toISOString()\n};"
+      },
+      "id": "check-timing",
+      "name": "Verificar Timing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.shouldSendReminder }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-should-send",
+      "name": "¿Enviar Recordatorio?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MESAYA_API_URL }}/restaurants/{{ $json.restaurantId || $json.restaurant_id }}",
+        "options": {}
+      },
+      "id": "get-restaurant",
+      "name": "Obtener Restaurante",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combinar datos para el email\nconst reservation = $('¿Enviar Recordatorio?').first().json;\nconst restaurant = $input.first().json;\n\nreturn {\n  reservationId: reservation.id,\n  customerName: reservation.customerName || reservation.customer_name || 'Cliente',\n  customerEmail: reservation.customerEmail || reservation.customer_email,\n  restaurantName: restaurant.name || 'Restaurante',\n  restaurantAddress: restaurant.address || '',\n  restaurantPhone: restaurant.phone || '',\n  date: reservation.date,\n  time: reservation.time,\n  partySize: reservation.partySize || reservation.party_size,\n  hoursUntil: reservation.hoursUntilReservation\n};"
+      },
+      "id": "prepare-email",
+      "name": "Preparar Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "recordatorios@mesaya.com",
+        "toEmail": "={{ $json.customerEmail }}",
+        "subject": "⏰ Recordatorio: Tu reservación en {{ $json.restaurantName }} es mañana",
+        "emailType": "html",
+        "html": "<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n    .header { background: #3B82F6; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }\n    .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }\n    .info-row { margin: 10px 0; padding: 10px; background: white; border-radius: 4px; }\n    .label { font-weight: bold; color: #6B7280; }\n    .value { color: #111827; }\n    .highlight { background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; }\n    .footer { text-align: center; margin-top: 20px; color: #6B7280; font-size: 12px; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>⏰ Recordatorio de Reservación</h1>\n    </div>\n    <div class=\"content\">\n      <p>Hola <strong>{{ $json.customerName }}</strong>,</p>\n      \n      <div class=\"highlight\">\n        <strong>¡Tu reservación es en {{ $json.hoursUntil }} horas!</strong>\n      </div>\n      \n      <p>Te recordamos los detalles de tu reservación:</p>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">🏪 Restaurante:</span>\n        <span class=\"value\">{{ $json.restaurantName }}</span>\n      </div>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">📍 Dirección:</span>\n        <span class=\"value\">{{ $json.restaurantAddress }}</span>\n      </div>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">📞 Teléfono:</span>\n        <span class=\"value\">{{ $json.restaurantPhone }}</span>\n      </div>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">📅 Fecha:</span>\n        <span class=\"value\">{{ $json.date }}</span>\n      </div>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">🕐 Hora:</span>\n        <span class=\"value\">{{ $json.time }}</span>\n      </div>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">👥 Personas:</span>\n        <span class=\"value\">{{ $json.partySize }}</span>\n      </div>\n      \n      <p style=\"margin-top: 20px;\">Si necesitas modificar o cancelar tu reservación, hazlo con anticipación.</p>\n      \n      <p>¡Te esperamos!</p>\n    </div>\n    <div class=\"footer\">\n      <p>MesaYA - Tu reservación, nuestra prioridad</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {}
+      },
+      "id": "send-reminder",
+      "name": "Enviar Recordatorio",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Cada Hora": {
+      "main": [
+        [
+          {
+            "node": "Obtener Reservaciones (próximas 24h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Reservaciones (próximas 24h)": {
+      "main": [
+        [
+          {
+            "node": "¿Hay Reservaciones?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay Reservaciones?": {
+      "main": [
+        [
+          {
+            "node": "Separar Reservaciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar Reservaciones": {
+      "main": [
+        [
+          {
+            "node": "Verificar Timing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Timing": {
+      "main": [
+        [
+          {
+            "node": "¿Enviar Recordatorio?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Enviar Recordatorio?": {
+      "main": [
+        [
+          {
+            "node": "Obtener Restaurante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Restaurante": {
+      "main": [
+        [
+          {
+            "node": "Preparar Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Email": {
+      "main": [
+        [
+          {
+            "node": "Enviar Recordatorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "reservations",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "reminders",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "scheduled",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "active": false,
+  "meta": {
+    "instanceId": "mesaya-n8n"
+  }
+}

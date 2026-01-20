@@ -22,3 +22,6 @@
 [submodule "mesaYA_auth_ms"]
 	path = mesaYA_auth_ms
 	url = https://github.com/StevSant/mesaYA_auth_ms.git
+[submodule "mesaYA_payment_ms"]
+	path = mesaYA_payment_ms
+	url = https://github.com/lesquel/mesaYA_payment_ms.git

@@ -86,7 +86,21 @@
       }
     },
     {
-      "label": "🔌 WebSocket (Go)",
+      "label": "� Payment Microservice (FastAPI)",
+      "type": "shell",
+      "command": "uv run mesaya-payment",
+      "options": {
+        "cwd": "${workspaceFolder}/mesaYA_payment_ms"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "�🔌 WebSocket (Go)",
       "type": "shell",
       "command": "go run ./cmd/server/main.go",
       "options": {
@@ -122,7 +136,8 @@
         "🔧 Backend (NestJS)",
         "📊 GraphQL (Strawberry)",
         "🤖 Chatbot (FastAPI)",
-        "🔌 WebSocket (Go)",
+        "� Payment Microservice (FastAPI)",
+        "�🔌 WebSocket (Go)",
         "🎨 Frontend (Angular)"
       ],
       "dependsOrder": "parallel",

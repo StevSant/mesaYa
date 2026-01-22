@@ -16,35 +16,41 @@
       "name": "Diariamente a las 8:00 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300]
+      "position": [240, 304]
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "={{ $env.MESAYA_API_URL }}/restaurants",
+        "url": "=http://host.docker.internal:3000/api/v1/restaurants",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
         "options": {}
       },
       "id": "get-restaurants",
       "name": "Obtener Restaurantes",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 300]
+      "position": [464, 304]
     },
     {
       "parameters": {
-        "fieldToSplitOut": "={{ $json.data || $json }}",
+        "fieldToSplitOut": "=data",
         "options": {}
       },
       "id": "split-restaurants",
       "name": "Separar Restaurantes",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [680, 300]
+      "position": [688, 304]
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "={{ $env.MESAYA_API_URL }}/reservations",
+        "url": "=http://host.docker.internal:3000/api/v1/reservations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -64,7 +70,13 @@
       "name": "Reservaciones del Día",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 300]
+      "position": [912, 304],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "7aeh1Rqb6JJzzuDs",
+          "name": "Bearer Auth account"
+        }
+      }
     },
     {
       "parameters": {
@@ -74,58 +86,38 @@
       "name": "Generar Resumen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [1120, 304]
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.summary.totalReservations }}",
-              "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "gt"
-              }
-            },
-            {
-              "leftValue": "={{ $json.ownerEmail }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "jsCode": "const data = $input.first().json;\n\n// Construir filas de la tabla de reservaciones\nconst reservationRows = data.reservations.map(r => `\n  <tr>\n    <td><strong>${r.time}</strong></td>\n    <td>${r.customerName}</td>\n    <td>${r.partySize} personas</td>\n    <td><span class=\"status-badge status-${r.status.toLowerCase()}\">${r.status}</span></td>\n  </tr>\n`).join('');\n\n// Construir contenido condicional\nconst content = data.summary.totalReservations > 0 ? `\n  <div class=\"stats-grid\">\n    <div class=\"stat-card\">\n      <div class=\"stat-value\">${data.summary.totalReservations}</div>\n      <div class=\"stat-label\">Reservaciones</div>\n    </div>\n    <div class=\"stat-card\">\n      <div class=\"stat-value\">${data.summary.totalGuests}</div>\n      <div class=\"stat-label\">Comensales</div>\n    </div>\n    <div class=\"stat-card\">\n      <div class=\"stat-value\">${data.summary.peakHour}:00</div>\n      <div class=\"stat-label\">Hora Pico</div>\n    </div>\n    <div class=\"stat-card\">\n      <div class=\"stat-value\">${data.summary.byStatus.CONFIRMED || 0}</div>\n      <div class=\"stat-label\">Confirmadas</div>\n    </div>\n  </div>\n  <div class=\"summary-message\">\n    <strong>¡Excelente!</strong> Tienes <strong>${data.summary.totalReservations}</strong> reservación(es) programada(s) para hoy.\n    Se esperan aproximadamente <strong>${data.summary.totalGuests}</strong> comensales.\n  </div>\n  <h3 class=\"section-title\">📋 Detalle de Reservaciones</h3>\n  <table class=\"reservations-table\">\n    <thead>\n      <tr>\n        <th>Hora</th>\n        <th>Cliente</th>\n        <th>Personas</th>\n        <th>Estado</th>\n      </tr>\n    </thead>\n    <tbody>${reservationRows}</tbody>\n  </table>\n` : `\n  <div class=\"no-reservations\">\n    <div class=\"no-reservations-icon\">📅</div>\n    <h3>Sin Reservaciones para Hoy</h3>\n    <p>No se registraron reservaciones para el día de hoy en tu restaurante.</p>\n    <p>¡Es un buen momento para promocionar tu negocio y atraer más clientes!</p>\n  </div>\n`;\n\n// Generar HTML completo\nconst htmlEmail = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Reporte Diario - MesaYA</title>\n  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;line-height:1.6;color:#334155;background-color:#f8fafc;padding:20px}.email-wrapper{max-width:650px;margin:0 auto;background-color:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(15,23,42,.08)}.header{background:linear-gradient(135deg,#f4511f 0%,#e64a19 100%);color:#fff;padding:40px 30px;text-align:center}.header h1{font-size:28px;font-weight:700;margin-bottom:8px;color:#fff}.header p{font-size:16px;opacity:.95;font-weight:400}.content{padding:40px 30px}.restaurant-info{background:#f8fafc;border-left:4px solid #f4511f;padding:16px 20px;margin-bottom:30px;border-radius:4px}.restaurant-info h2{color:#0f172a;font-size:20px;font-weight:600;margin-bottom:4px}.restaurant-info .date{color:#64748b;font-size:14px}.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:35px}.stat-card{background:#f8fafc;border:1px solid #e2e8f0;padding:20px;border-radius:8px;text-align:center;transition:transform .2s}.stat-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(244,81,31,.1)}.stat-value{font-size:36px;font-weight:700;color:#f4511f;line-height:1.2;margin-bottom:6px}.stat-label{color:#64748b;font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}.section-title{color:#0f172a;font-size:20px;font-weight:600;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid #e2e8f0}.reservations-table{width:100%;border-collapse:collapse;margin-bottom:30px;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0}.reservations-table thead{background:#f8fafc}.reservations-table th{padding:14px 16px;text-align:left;font-weight:600;font-size:13px;color:#0f172a;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #e2e8f0}.reservations-table td{padding:14px 16px;border-bottom:1px solid #f1f5f9;font-size:14px;color:#334155}.reservations-table tbody tr:last-child td{border-bottom:none}.reservations-table tbody tr:hover{background-color:#f8fafc}.status-badge{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}.status-confirmed{background-color:#dcfce7;color:#166534}.status-pending{background-color:#fef3c7;color:#92400e}.status-cancelled{background-color:#fee2e2;color:#991b1b}.status-completed{background-color:#dbeafe;color:#1e40af}.no-reservations{background:#f8fafc;padding:50px 30px;text-align:center;border-radius:8px;margin-bottom:30px;border:2px dashed #e2e8f0}.no-reservations-icon{font-size:64px;margin-bottom:20px;opacity:.7}.no-reservations h3{color:#0f172a;font-size:22px;font-weight:600;margin-bottom:12px}.no-reservations p{color:#64748b;font-size:15px;line-height:1.6;max-width:400px;margin:0 auto 8px}.cta-button{display:inline-block;margin-top:20px;padding:12px 28px;background:#f4511f;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;transition:background .2s}.cta-button:hover{background:#e64a19}.summary-message{background:#f8fafc;padding:20px;border-radius:8px;margin-bottom:30px;color:#334155;font-size:15px;line-height:1.7}.footer{background:#f8fafc;padding:30px;text-align:center;border-top:1px solid #e2e8f0}.footer-logo{font-size:24px;font-weight:700;color:#f4511f;margin-bottom:12px}.footer p{color:#64748b;font-size:13px;margin-bottom:6px}.footer-links{margin-top:16px}.footer-links a{color:#64748b;text-decoration:none;margin:0 10px;font-size:12px}.footer-links a:hover{color:#f4511f;text-decoration:underline}@media only screen and (max-width:600px){.email-wrapper{border-radius:0}.header{padding:30px 20px}.content{padding:30px 20px}.stats-grid{grid-template-columns:repeat(2,1fr)}.stat-value{font-size:28px}.reservations-table{font-size:13px}.reservations-table th,.reservations-table td{padding:10px 8px}}</style>\n</head>\n<body>\n  <div class=\"email-wrapper\">\n    <div class=\"header\">\n      <h1>📊 Reporte Diario</h1>\n      <p>Resumen de actividad de tu restaurante</p>\n    </div>\n    <div class=\"content\">\n      <div class=\"restaurant-info\">\n        <h2>${data.restaurantName}</h2>\n        <p class=\"date\">📅 ${data.date}</p>\n      </div>\n      ${content}\n      <div class=\"summary-message\">\n        <p>💡 <strong>Tip del día:</strong> Revisa las reservaciones pendientes y confirma con tus clientes para reducir cancelaciones.</p>\n      </div>\n    </div>\n    <div class=\"footer\">\n      <div class=\"footer-logo\">MesaYA</div>\n      <p>Sistema de Gestión de Reservaciones</p>\n      <p>Este es un reporte automático generado por tu sistema MesaYA</p>\n    </div>\n  </div>\n</body>\n</html>`;\n\nreturn {\n  ...data,\n  htmlEmail,\n  emailSubject: `📊 Reporte Diario - ${data.restaurantName} (${data.date})`\n};"
       },
-      "id": "filter-with-reservations",
-      "name": "¿Tiene Reservaciones?",
-      "type": "n8n-nodes-base.filter",
+      "id": "generate-html-email",
+      "name": "Generar HTML Email",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 300]
+      "position": [1340, 304]
     },
     {
       "parameters": {
-        "fromEmail": "reportes@mesaya.com",
-        "toEmail": "={{ $json.ownerEmail }}",
-        "subject": "📊 Reporte Diario - {{ $json.restaurantName }} ({{ $json.date }})",
+        "sendTo": "={{ $json.ownerEmail }}",
+        "subject": "={{ $json.emailSubject }}",
         "emailType": "html",
-        "html": "<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 700px; margin: 0 auto; padding: 20px; }\n    .header { background: #8B5CF6; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }\n    .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }\n    .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }\n    .stat-card { background: white; padding: 15px; border-radius: 8px; text-align: center; }\n    .stat-value { font-size: 32px; font-weight: bold; color: #8B5CF6; }\n    .stat-label { color: #6B7280; font-size: 14px; }\n    table { width: 100%; border-collapse: collapse; margin: 20px 0; }\n    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }\n    th { background: #f3f4f6; font-weight: bold; }\n    .status-confirmed { color: #10B981; }\n    .status-pending { color: #F59E0B; }\n    .status-cancelled { color: #EF4444; }\n    .footer { text-align: center; margin-top: 20px; color: #6B7280; font-size: 12px; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>📊 Reporte Diario</h1>\n      <p>{{ $json.restaurantName }} - {{ $json.date }}</p>\n    </div>\n    <div class=\"content\">\n      <div class=\"stat-grid\">\n        <div class=\"stat-card\">\n          <div class=\"stat-value\">{{ $json.summary.totalReservations }}</div>\n          <div class=\"stat-label\">Reservaciones</div>\n        </div>\n        <div class=\"stat-card\">\n          <div class=\"stat-value\">{{ $json.summary.totalGuests }}</div>\n          <div class=\"stat-label\">Comensales</div>\n        </div>\n        <div class=\"stat-card\">\n          <div class=\"stat-value\">{{ $json.summary.peakHour }}:00</div>\n          <div class=\"stat-label\">Hora Pico</div>\n        </div>\n        <div class=\"stat-card\">\n          <div class=\"stat-value\">{{ $json.summary.byStatus.CONFIRMED || 0 }}</div>\n          <div class=\"stat-label\">Confirmadas</div>\n        </div>\n      </div>\n      \n      <h3>📋 Detalle de Reservaciones</h3>\n      <table>\n        <thead>\n          <tr>\n            <th>Hora</th>\n            <th>Cliente</th>\n            <th>Personas</th>\n            <th>Estado</th>\n          </tr>\n        </thead>\n        <tbody>\n          {{#each $json.reservations}}\n          <tr>\n            <td>{{ this.time }}</td>\n            <td>{{ this.customerName }}</td>\n            <td>{{ this.partySize }}</td>\n            <td class=\"status-{{ this.status.toLowerCase() }}\">{{ this.status }}</td>\n          </tr>\n          {{/each}}\n        </tbody>\n      </table>\n      \n      <p>¡Que tengas un excelente día!</p>\n    </div>\n    <div class=\"footer\">\n      <p>MesaYA - Reporte generado automáticamente</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "message": "={{ $json.htmlEmail }}",
         "options": {}
       },
-      "id": "send-report",
-      "name": "Enviar Reporte",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
-      "position": [1560, 300]
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1568, 304],
+      "id": "c21f40e7-8d1f-4129-b828-7c9e2b40a7c7",
+      "name": "Enviar Reporte Gmail",
+      "webhookId": "96df7092-cf9d-475b-ae1a-9b6663f4d483",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PpvtF1KUJoFPAXAp",
+          "name": "Gmail account"
+        }
+      }
     }
   ],
   "connections": {
@@ -177,18 +169,18 @@
       "main": [
         [
           {
-            "node": "¿Tiene Reservaciones?",
+            "node": "Generar HTML Email",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "¿Tiene Reservaciones?": {
+    "Generar HTML Email": {
       "main": [
         [
           {
-            "node": "Enviar Reporte",
+            "node": "Enviar Reporte Gmail",
             "type": "main",
             "index": 0
           }
@@ -216,6 +208,7 @@
   "triggerCount": 1,
   "active": false,
   "meta": {
-    "instanceId": "mesaya-n8n"
+    "instanceId": "mesaya-n8n",
+    "templateCredsSetupCompleted": true
   }
 }

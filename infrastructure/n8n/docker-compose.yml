@@ -33,25 +33,26 @@ services:
     # Nota: Kafka debe estar corriendo antes de iniciar n8n
     # Usar: docker compose -f infrastructure/kafka/docker-compose.yml up -d
     # O levantar desde el docker-compose.yml raíz que incluye ambos
+    env_file:
+      - .env
     environment:
       # Configuración de red
       N8N_HOST: 0.0.0.0
       N8N_PORT: 5678
       N8N_PROTOCOL: http
-      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL}
 
       # Timezone
-      GENERIC_TIMEZONE: ${TZ:-America/Guayaquil}
-      TZ: ${TZ:-America/Guayaquil}
+      GENERIC_TIMEZONE: ${TZ}
+      TZ: ${TZ}
 
       # Autenticación
       N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-mesaya_n8n_2024}
+      N8N_BASIC_AUTH_USER: ${N8N_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD}
 
       # Seguridad - Clave de encriptación para credenciales
-      # IMPORTANTE: Generar con: openssl rand -hex 32
-      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-cambiar_esta_clave_en_produccion_32chars}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
 
       # Configuración de ejecuciones
       EXECUTIONS_MODE: regular
@@ -65,7 +66,7 @@ services:
       DB_TYPE: sqlite
 
       # Logs
-      N8N_LOG_LEVEL: ${N8N_LOG_LEVEL:-info}
+      N8N_LOG_LEVEL: ${N8N_LOG_LEVEL}
       N8N_LOG_OUTPUT: console
 
       # Métricas (Prometheus)
@@ -81,14 +82,23 @@ services:
       NODE_FUNCTION_ALLOW_BUILTIN: "*"
       NODE_FUNCTION_ALLOW_EXTERNAL: "*"
 
+      # Permitir acceso a variables de entorno en workflows
+      N8N_TEMPLATES_ENABLED: "true"
+      N8N_USER_FOLDER: /home/node/.n8n
+
       # URLs de servicios MesaYA (para workflows)
-      MESAYA_API_URL: ${MESAYA_API_URL:-http://host.docker.internal:3000}
-      MESAYA_GRAPHQL_URL: ${MESAYA_GRAPHQL_URL:-http://host.docker.internal:8000/graphql}
-      MESAYA_WS_URL: ${MESAYA_WS_URL:-ws://host.docker.internal:8080}
-      MESAYA_CHATBOT_URL: ${MESAYA_CHATBOT_URL:-http://host.docker.internal:8001}
+      MESAYA_API_URL: ${MESAYA_API_URL}
+      MESAYA_GRAPHQL_URL: ${MESAYA_GRAPHQL_URL}
+      MESAYA_WS_URL: ${MESAYA_WS_URL}
+      MESAYA_CHATBOT_URL: ${MESAYA_CHATBOT_URL}
+      MESAYA_PAYMENT_URL: ${MESAYA_PAYMENT_URL}
+
+      # Webhooks externos
+      PARTNER_WEBHOOK_URL: ${PARTNER_WEBHOOK_URL}
+      PARTNER_WEBHOOK_SECRET: ${PARTNER_WEBHOOK_SECRET}
 
       # Kafka
-      MESAYA_KAFKA_BROKERS: kafka:9092
+      MESAYA_KAFKA_BROKERS: ${MESAYA_KAFKA_BROKERS}
     ports:
       - "5678:5678"
     volumes:

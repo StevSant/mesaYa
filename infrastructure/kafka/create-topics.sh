@@ -59,6 +59,8 @@ AUTH_TOPICS=(
   "auth.find-user-by-id.reply"
   "auth.find-user-by-email"
   "auth.find-user-by-email.reply"
+  "auth.service-token.generate"
+  "auth.service-token.generate.reply"
 )
 
 echo "Creando ${#TOPICS[@]} topics de eventos..."

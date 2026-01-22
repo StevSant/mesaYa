@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reporte Diario - MesaYA</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.6;
+        color: #334155;
+        background-color: #f8fafc;
+        padding: 20px;
+      }
+
+      .email-wrapper {
+        max-width: 650px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(15, 23, 42, 0.08);
+      }
+
+      .header {
+        background: linear-gradient(135deg, #f4511f 0%, #e64a19 100%);
+        color: #ffffff;
+        padding: 40px 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        color: #ffffff;
+      }
+
+      .header p {
+        font-size: 16px;
+        opacity: 0.95;
+        font-weight: 400;
+      }
+
+      .content {
+        padding: 40px 30px;
+      }
+
+      .restaurant-info {
+        background: #f8fafc;
+        border-left: 4px solid #f4511f;
+        padding: 16px 20px;
+        margin-bottom: 30px;
+        border-radius: 4px;
+      }
+
+      .restaurant-info h2 {
+        color: #0f172a;
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .restaurant-info .date {
+        color: #64748b;
+        font-size: 14px;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 16px;
+        margin-bottom: 35px;
+      }
+
+      .stat-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+        transition: transform 0.2s;
+      }
+
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(244, 81, 31, 0.1);
+      }
+
+      .stat-value {
+        font-size: 36px;
+        font-weight: 700;
+        color: #f4511f;
+        line-height: 1.2;
+        margin-bottom: 6px;
+      }
+
+      .stat-label {
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .section-title {
+        color: #0f172a;
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e2e8f0;
+      }
+
+      .reservations-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 30px;
+        background: #ffffff;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+      }
+
+      .reservations-table thead {
+        background: #f8fafc;
+      }
+
+      .reservations-table th {
+        padding: 14px 16px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 13px;
+        color: #0f172a;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 2px solid #e2e8f0;
+      }
+
+      .reservations-table td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 14px;
+        color: #334155;
+      }
+
+      .reservations-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      .reservations-table tbody tr:hover {
+        background-color: #f8fafc;
+      }
+
+      .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
+
+      .status-confirmed {
+        background-color: #dcfce7;
+        color: #166534;
+      }
+
+      .status-pending {
+        background-color: #fef3c7;
+        color: #92400e;
+      }
+
+      .status-cancelled {
+        background-color: #fee2e2;
+        color: #991b1b;
+      }
+
+      .status-completed {
+        background-color: #dbeafe;
+        color: #1e40af;
+      }
+
+      .no-reservations {
+        background: #f8fafc;
+        padding: 50px 30px;
+        text-align: center;
+        border-radius: 8px;
+        margin-bottom: 30px;
+        border: 2px dashed #e2e8f0;
+      }
+
+      .no-reservations-icon {
+        font-size: 64px;
+        margin-bottom: 20px;
+        opacity: 0.7;
+      }
+
+      .no-reservations h3 {
+        color: #0f172a;
+        font-size: 22px;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+
+      .no-reservations p {
+        color: #64748b;
+        font-size: 15px;
+        line-height: 1.6;
+        max-width: 400px;
+        margin: 0 auto 8px;
+      }
+
+      .cta-button {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 12px 28px;
+        background: #f4511f;
+        color: #ffffff;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 14px;
+        transition: background 0.2s;
+      }
+
+      .cta-button:hover {
+        background: #e64a19;
+      }
+
+      .summary-message {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+        color: #334155;
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .footer {
+        background: #f8fafc;
+        padding: 30px;
+        text-align: center;
+        border-top: 1px solid #e2e8f0;
+      }
+
+      .footer-logo {
+        font-size: 24px;
+        font-weight: 700;
+        color: #f4511f;
+        margin-bottom: 12px;
+      }
+
+      .footer p {
+        color: #64748b;
+        font-size: 13px;
+        margin-bottom: 6px;
+      }
+
+      .footer-links {
+        margin-top: 16px;
+      }
+
+      .footer-links a {
+        color: #64748b;
+        text-decoration: none;
+        margin: 0 10px;
+        font-size: 12px;
+      }
+
+      .footer-links a:hover {
+        color: #f4511f;
+        text-decoration: underline;
+      }
+
+      @media only screen and (max-width: 600px) {
+        .email-wrapper {
+          border-radius: 0;
+        }
+
+        .header {
+          padding: 30px 20px;
+        }
+
+        .content {
+          padding: 30px 20px;
+        }
+
+        .stats-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .stat-value {
+          font-size: 28px;
+        }
+
+        .reservations-table {
+          font-size: 13px;
+        }
+
+        .reservations-table th,
+        .reservations-table td {
+          padding: 10px 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-wrapper">
+      <!-- Header -->
+      <div class="header">
+        <h1>📊 Reporte Diario</h1>
+        <p>Resumen de actividad de tu restaurante</p>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <!-- Restaurant Info -->
+        <div class="restaurant-info">
+          <h2>{{ $json.restaurantName }}</h2>
+          <p class="date">📅 {{ $json.date }}</p>
+        </div>
+
+        {{#if $json.summary.totalReservations}}
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value">{{ $json.summary.totalReservations }}</div>
+            <div class="stat-label">Reservaciones</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ $json.summary.totalGuests }}</div>
+            <div class="stat-label">Comensales</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ $json.summary.peakHour }}:00</div>
+            <div class="stat-label">Hora Pico</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">
+              {{ $json.summary.byStatus.CONFIRMED || 0 }}
+            </div>
+            <div class="stat-label">Confirmadas</div>
+          </div>
+        </div>
+
+        <!-- Summary Message -->
+        <div class="summary-message">
+          <strong>¡Excelente!</strong> Tienes
+          <strong>{{ $json.summary.totalReservations }}</strong> reservación(es)
+          programada(s) para hoy. Se esperan aproximadamente
+          <strong>{{ $json.summary.totalGuests }}</strong> comensales.
+        </div>
+
+        <!-- Reservations Table -->
+        <h3 class="section-title">📋 Detalle de Reservaciones</h3>
+        <table class="reservations-table">
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Cliente</th>
+              <th>Personas</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each $json.reservations}}
+            <tr>
+              <td><strong>{{ this.time }}</strong></td>
+              <td>{{ this.customerName }}</td>
+              <td>{{ this.partySize }} personas</td>
+              <td>
+                <span class="status-badge status-{{ this.status.toLowerCase }}">
+                  {{ this.status }}
+                </span>
+              </td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+
+        {{else}}
+        <!-- No Reservations -->
+        <div class="no-reservations">
+          <div class="no-reservations-icon">📅</div>
+          <h3>Sin Reservaciones para Hoy</h3>
+          <p>
+            No se registraron reservaciones para el día de hoy en tu
+            restaurante.
+          </p>
+          <p>
+            ¡Es un buen momento para promocionar tu negocio y atraer más
+            clientes!
+          </p>
+          <a href="#" class="cta-button">Ver Panel de Control</a>
+        </div>
+        {{/if}}
+
+        <!-- Closing Message -->
+        <div class="summary-message">
+          <p>
+            💡 <strong>Tip del día:</strong> Revisa las reservaciones pendientes
+            y confirma con tus clientes para reducir cancelaciones.
+          </p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <div class="footer-logo">MesaYA</div>
+        <p>Sistema de Gestión de Reservaciones</p>
+        <p>Este es un reporte automático generado por tu sistema MesaYA</p>
+        <div class="footer-links">
+          <a href="#">Panel de Control</a>
+          <a href="#">Soporte</a>
+          <a href="#">Configuración</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

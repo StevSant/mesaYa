@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Verificar firma HMAC del partner\nconst crypto = require('crypto');\n\nconst payload = $input.first().json;\nconst headers = $input.first().headers;\n\n// Obtener firma del header\nconst receivedSignature = headers['x-partner-signature'];\nif (!receivedSignature) {\n  throw new Error('Firma HMAC no proporcionada en header x-partner-signature');\n}\n\n// Secret compartido con el partner (debe estar en variable de entorno)\nconst secret = process.env.PARTNER_WEBHOOK_SECRET || 'default-secret-change-me';\n\n// Generar firma esperada\nconst payloadString = JSON.stringify(payload);\nconst expectedSignature = crypto\n  .createHmac('sha256', secret)\n  .update(payloadString)\n  .digest('hex');\n\n// Comparar firmas (time-safe comparison)\nconst isValid = crypto.timingSafeEqual(\n  Buffer.from(receivedSignature),\n  Buffer.from(expectedSignature)\n);\n\nif (!isValid) {\n  throw new Error('Firma HMAC inválida - webhook no autenticado');\n}\n\n// Validar campos obligatorios\nif (!payload.event_type || !payload.timestamp) {\n  throw new Error('Campos obligatorios faltantes: event_type, timestamp');\n}\n\nreturn {\n  event_type: payload.event_type,\n  partner_id: payload.partner_id || headers['x-partner-id'] || 'unknown',\n  timestamp: payload.timestamp,\n  data: payload.data || payload,\n  verified: true\n};"
+        "jsCode": "// Verificar firma HMAC del partner\nconst crypto = require('crypto');\n\nconst payload = $input.first().json;\nconst headers = $input.first().headers;\n\n// Obtener firma del header\nconst receivedSignature = headers['x-partner-signature'];\nif (!receivedSignature) {\n  throw new Error('Firma HMAC no proporcionada en header x-partner-signature');\n}\n\n// Secret compartido con el partner (obtener de variables de n8n)\nconst secret = $vars.PARTNER_WEBHOOK_SECRET || 'default-secret-change-me';\n\n// Generar firma esperada\nconst payloadString = JSON.stringify(payload);\nconst expectedSignature = crypto\n  .createHmac('sha256', secret)\n  .update(payloadString)\n  .digest('hex');\n\n// Comparar firmas (time-safe comparison)\nconst isValid = crypto.timingSafeEqual(\n  Buffer.from(receivedSignature),\n  Buffer.from(expectedSignature)\n);\n\nif (!isValid) {\n  throw new Error('Firma HMAC inválida - webhook no autenticado');\n}\n\n// Validar campos obligatorios\nif (!payload.event_type || !payload.timestamp) {\n  throw new Error('Campos obligatorios faltantes: event_type, timestamp');\n}\n\nreturn {\n  event_type: payload.event_type,\n  partner_id: payload.partner_id || headers['x-partner-id'] || 'unknown',\n  timestamp: payload.timestamp,\n  data: payload.data || payload,\n  verified: true\n};"
       },
       "id": "verify-hmac",
       "name": "Verificar Firma HMAC",
@@ -132,7 +132,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.MESAYA_API_URL }}/reservations",
+        "url": "={{ $vars.MESAYA_API_URL }}/api/v1/reservations",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -153,7 +153,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $env.MESAYA_API_URL }}/reservations/{{ $json.data.reservation_id }}",
+        "url": "={{ $vars.MESAYA_API_URL }}/api/v1/reservations/{{ $json.data.reservation_id }}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -182,7 +182,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.MESAYA_API_URL }}/customers",
+        "url": "={{ $vars.MESAYA_API_URL }}/api/v1/customers",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -203,7 +203,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.MESAYA_API_URL }}/feedback",
+        "url": "={{ $vars.MESAYA_API_URL }}/api/v1/feedback",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

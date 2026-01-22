@@ -1,0 +1,424 @@
+{
+  "name": "MesaYA - Partner Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "partner-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-partner",
+      "name": "Partner Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 400],
+      "webhookId": "partner-events"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verificar firma HMAC del partner\nconst crypto = require('crypto');\n\nconst payload = $input.first().json;\nconst headers = $input.first().headers;\n\n// Obtener firma del header\nconst receivedSignature = headers['x-partner-signature'];\nif (!receivedSignature) {\n  throw new Error('Firma HMAC no proporcionada en header x-partner-signature');\n}\n\n// Secret compartido con el partner (debe estar en variable de entorno)\nconst secret = process.env.PARTNER_WEBHOOK_SECRET || 'default-secret-change-me';\n\n// Generar firma esperada\nconst payloadString = JSON.stringify(payload);\nconst expectedSignature = crypto\n  .createHmac('sha256', secret)\n  .update(payloadString)\n  .digest('hex');\n\n// Comparar firmas (time-safe comparison)\nconst isValid = crypto.timingSafeEqual(\n  Buffer.from(receivedSignature),\n  Buffer.from(expectedSignature)\n);\n\nif (!isValid) {\n  throw new Error('Firma HMAC inválida - webhook no autenticado');\n}\n\n// Validar campos obligatorios\nif (!payload.event_type || !payload.timestamp) {\n  throw new Error('Campos obligatorios faltantes: event_type, timestamp');\n}\n\nreturn {\n  event_type: payload.event_type,\n  partner_id: payload.partner_id || headers['x-partner-id'] || 'unknown',\n  timestamp: payload.timestamp,\n  data: payload.data || payload,\n  verified: true\n};"
+      },
+      "id": "verify-hmac",
+      "name": "Verificar Firma HMAC",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "reservation.created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reservation_created"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "reservation.cancelled",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reservation_cancelled"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "customer.registered",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "customer_registered"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "feedback.submitted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "feedback_submitted"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "switch-event-type",
+      "name": "Procesar según Tipo de Evento",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MESAYA_API_URL }}/reservations",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "=",
+              "value": "={{ JSON.stringify($json.data) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-reservation",
+      "name": "Crear Reservación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.MESAYA_API_URL }}/reservations/{{ $json.data.reservation_id }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "CANCELLED"
+            },
+            {
+              "name": "cancelled_by",
+              "value": "partner"
+            },
+            {
+              "name": "cancellation_reason",
+              "value": "={{ $json.data.reason || 'Cancelado por partner' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cancel-reservation",
+      "name": "Cancelar Reservación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MESAYA_API_URL }}/customers",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "=",
+              "value": "={{ JSON.stringify($json.data) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "register-customer",
+      "name": "Registrar Cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MESAYA_API_URL }}/feedback",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "=",
+              "value": "={{ JSON.stringify($json.data) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-feedback",
+      "name": "Guardar Feedback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Manejo de eventos desconocidos\nconst event = $input.first().json;\n\nconsole.warn(`Evento desconocido recibido del partner: ${event.event_type}`);\n\n// Log para auditoría\nreturn {\n  handled: false,\n  event_type: event.event_type,\n  partner_id: event.partner_id,\n  timestamp: event.timestamp,\n  message: 'Tipo de evento no reconocido'\n};"
+      },
+      "id": "handle-unknown",
+      "name": "Evento Desconocido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combinar todos los resultados\nconst results = [];\n\n// Obtener datos de todos los paths\nconst nodes = ['Crear Reservación', 'Cancelar Reservación', 'Registrar Cliente', 'Guardar Feedback', 'Evento Desconocido'];\n\nfor (const nodeName of nodes) {\n  try {\n    const data = $(nodeName).all();\n    if (data && data.length > 0) {\n      results.push(...data.map(d => d.json));\n    }\n  } catch (e) {\n    // Nodo no ejecutado en este flujo\n  }\n}\n\nconst event = $('Verificar Firma HMAC').first().json;\n\nreturn {\n  event_type: event.event_type,\n  partner_id: event.partner_id,\n  processed: true,\n  timestamp: new Date().toISOString(),\n  results: results\n};"
+      },
+      "id": "merge-results",
+      "name": "Combinar Resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ \n  ack: true, \n  event_type: $json.event_type,\n  processed_at: $json.timestamp,\n  status: 'success'\n}) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-ack",
+      "name": "Responder ACK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ \n  ack: false, \n  error: $json.error || 'Verification failed',\n  timestamp: new Date().toISOString()\n}) }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "respond-error",
+      "name": "Responder Error Autenticación",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 600]
+    }
+  ],
+  "connections": {
+    "Partner Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verificar Firma HMAC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Firma HMAC": {
+      "main": [
+        [
+          {
+            "node": "Procesar según Tipo de Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar según Tipo de Evento": {
+      "main": [
+        [
+          {
+            "node": "Crear Reservación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cancelar Reservación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Evento Desconocido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Reservación": {
+      "main": [
+        [
+          {
+            "node": "Combinar Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancelar Reservación": {
+      "main": [
+        [
+          {
+            "node": "Combinar Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Cliente": {
+      "main": [
+        [
+          {
+            "node": "Combinar Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Feedback": {
+      "main": [
+        [
+          {
+            "node": "Combinar Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evento Desconocido": {
+      "main": [
+        [
+          {
+            "node": "Combinar Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combinar Resultados": {
+      "main": [
+        [
+          {
+            "node": "Responder ACK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "versionId": "1",
+  "tags": [
+    {
+      "name": "partner",
+      "createdAt": "2026-01-21T00:00:00.000Z",
+      "updatedAt": "2026-01-21T00:00:00.000Z"
+    },
+    {
+      "name": "external-events",
+      "createdAt": "2026-01-21T00:00:00.000Z",
+      "updatedAt": "2026-01-21T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "active": false,
+  "meta": {
+    "instanceId": "mesaya-n8n"
+  }
+}

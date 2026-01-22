@@ -2,19 +2,82 @@
 
 Esta carpeta contiene los workflows de automatización de n8n para la plataforma MesaYA.
 
+**Principio fundamental:** "Todo evento externo pasa por n8n"
+
 ## 📁 Estructura
 
 ```
 workflows/
+├── payment-handler.json             # ⚡ OBLIGATORIO: Webhook de pasarela de pago
+├── partner-handler.json             # ⚡ OBLIGATORIO: Webhook de grupo partner con HMAC
+├── mcp-input-handler.json           # ⚡ OBLIGATORIO: Telegram/Email → AI Orchestrator
+├── daily-report.json                # ⚡ OBLIGATORIO: Tareas programadas (Scheduled Tasks)
 ├── reservation-notification.json    # Notificación al crear reservación
 ├── kafka-reservation-consumer.json  # Consumidor de eventos Kafka
-├── reservation-reminder-24h.json    # Recordatorio 24h antes
-└── daily-report.json               # Reporte diario para restaurantes
+└── reservation-reminder-24h.json    # Recordatorio 24h antes
 ```
 
-## 🚀 Workflows Disponibles
+## 🚀 Workflows OBLIGATORIOS (Event Bus Externo)
 
-### 1. Notificación de Nueva Reservación
+### 1. Payment Handler ⚡
+
+**Archivo:** `payment-handler.json`
+
+- **Trigger:** Webhook POST `/payment-webhook`
+- **Función:** Procesa pagos de pasarelas externas
+- **Flujo:**
+  1. ✅ Recibe webhook de pasarela de pago
+  2. ✅ Valida payload (campos obligatorios, status, metadata)
+  3. ✅ Activa servicio/reserva (POST a /payments)
+  4. ✅ Notifica vía WebSocket (broadcast event)
+  5. ✅ Envía email de confirmación
+  6. ✅ Dispara webhook al grupo partner
+  7. ✅ Responde con status OK/Error
+
+### 2. Partner Handler ⚡
+
+**Archivo:** `partner-handler.json`
+
+- **Trigger:** Webhook POST `/partner-webhook`
+- **Función:** Recibe eventos de grupos partner externos
+- **Flujo:**
+  1. ✅ Recibe webhook de grupo partner
+  2. ✅ Verifica firma HMAC (seguridad)
+  3. ✅ Procesa según tipo de evento (Switch):
+     - `reservation.created` → Crear reservación
+     - `reservation.cancelled` → Cancelar reservación
+     - `customer.registered` → Registrar cliente
+     - `feedback.submitted` → Guardar feedback
+  4. ✅ Ejecuta acción de negocio correspondiente
+  5. ✅ Responde ACK (acknowledgment)
+
+### 3. MCP Input Handler ⚡
+
+**Archivo:** `mcp-input-handler.json`
+
+- **Trigger:** Polling Telegram + Email IMAP
+- **Función:** Procesa mensajes de canales externos hacia AI
+- **Flujo:**
+  1. ✅ Recibe mensaje de Telegram o Email
+  2. ✅ Extrae contenido y adjuntos (fotos, docs, audio)
+  3. ✅ Envía a AI Orchestrator (chatbot service)
+  4. ✅ Responde por el mismo canal (Telegram/Email)
+
+### 4. Scheduled Tasks ⚡
+
+**Archivo:** `daily-report.json`
+
+- **Trigger:** Cron job (diariamente a las 8:00 AM)
+- **Función:** Tareas programadas del sistema
+- **Incluye:**
+  - 📊 Reporte diario de reservaciones
+  - 🧹 Limpieza de datos (extensible)
+  - 📨 Recordatorios automáticos
+  - 💚 Health checks (extensible)
+
+## 📋 Workflows Adicionales
+
+### 5. Notificación de Nueva Reservación
 
 **Archivo:** `reservation-notification.json`
 
@@ -26,7 +89,7 @@ workflows/
   3. Obtiene información de la mesa
   4. Envía email de confirmación
 
-### 2. Consumidor de Kafka (Reservaciones)
+### 6. Consumidor de Kafka (Reservaciones)
 
 **Archivo:** `kafka-reservation-consumer.json`
 
@@ -37,7 +100,7 @@ workflows/
   - `status_changed` - Cambio de estado
   - `cancelled` - Cancelación
 
-### 3. Recordatorio 24h Antes
+### 7. Recordatorio 24h Antes
 
 **Archivo:** `reservation-reminder-24h.json`
 
@@ -47,18 +110,6 @@ workflows/
   1. Busca reservaciones confirmadas para las próximas 24h
   2. Filtra las que están en el rango de 23-25h
   3. Envía email de recordatorio
-
-### 4. Reporte Diario
-
-**Archivo:** `daily-report.json`
-
-- **Trigger:** Diariamente a las 8:00 AM
-- **Función:** Envía reporte diario a dueños de restaurantes
-- **Incluye:**
-  - Total de reservaciones del día
-  - Total de comensales esperados
-  - Hora pico
-  - Detalle de cada reservación
 
 ## 📥 Importar Workflows
 
@@ -91,6 +142,8 @@ Los workflows usan las siguientes variables de entorno (configurar en docker-com
 | `MESAYA_GRAPHQL_URL` | URL del servidor GraphQL | <http://host.docker.internal:8000/graphql> |
 | `MESAYA_WS_URL` | URL del WebSocket | ws://host.docker.internal:8080 |
 | `MESAYA_CHATBOT_URL` | URL del chatbot | <http://host.docker.internal:8001> |
+| `PARTNER_WEBHOOK_URL` | URL del webhook del partner | <https://partner.example.com/webhook> |
+| `PARTNER_WEBHOOK_SECRET` | Secret HMAC para verificar partners | changeme-secure-secret |
 
 ### Credenciales SMTP
 

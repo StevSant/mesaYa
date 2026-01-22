@@ -1,0 +1,370 @@
+{
+  "name": "MesaYA - MCP Input Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "generic",
+        "updateMethod": "polling",
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        }
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Bot",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "email-trigger",
+      "name": "Email IMAP",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [240, 500],
+      "credentials": {
+        "imap": {
+          "id": "imap-credentials",
+          "name": "IMAP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer contenido y adjuntos de Telegram\nconst message = $input.first().json.message;\n\nif (!message) {\n  throw new Error('No se recibió mensaje de Telegram');\n}\n\nconst attachments = [];\n\n// Extraer diferentes tipos de archivos adjuntos\nif (message.photo) {\n  attachments.push({\n    type: 'photo',\n    file_id: message.photo[message.photo.length - 1].file_id,\n    mime_type: 'image/jpeg'\n  });\n}\n\nif (message.document) {\n  attachments.push({\n    type: 'document',\n    file_id: message.document.file_id,\n    file_name: message.document.file_name,\n    mime_type: message.document.mime_type\n  });\n}\n\nif (message.voice) {\n  attachments.push({\n    type: 'voice',\n    file_id: message.voice.file_id,\n    mime_type: 'audio/ogg'\n  });\n}\n\nif (message.audio) {\n  attachments.push({\n    type: 'audio',\n    file_id: message.audio.file_id,\n    mime_type: message.audio.mime_type || 'audio/mpeg'\n  });\n}\n\nreturn {\n  channel: 'telegram',\n  chat_id: message.chat.id,\n  user_id: message.from.id,\n  username: message.from.username || message.from.first_name,\n  text: message.text || message.caption || '',\n  attachments: attachments,\n  message_id: message.message_id,\n  timestamp: new Date(message.date * 1000).toISOString()\n};"
+      },
+      "id": "extract-telegram",
+      "name": "Extraer Contenido Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer contenido y adjuntos de Email\nconst email = $input.first().json;\n\nif (!email) {\n  throw new Error('No se recibió email');\n}\n\nconst attachments = [];\n\n// Extraer adjuntos si existen\nif (email.attachments && Array.isArray(email.attachments)) {\n  for (const attachment of email.attachments) {\n    attachments.push({\n      type: 'email_attachment',\n      filename: attachment.filename,\n      content_type: attachment.contentType,\n      size: attachment.size,\n      content: attachment.content // Base64\n    });\n  }\n}\n\nreturn {\n  channel: 'email',\n  email_id: email.uid || email.messageId,\n  from: email.from.value[0].address,\n  from_name: email.from.value[0].name || email.from.value[0].address,\n  subject: email.subject,\n  text: email.text || email.textAsHtml || '',\n  html: email.html || '',\n  attachments: attachments,\n  timestamp: email.date\n};"
+      },
+      "id": "extract-email",
+      "name": "Extraer Contenido Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-channels",
+      "name": "Merge Canales",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MESAYA_CHATBOT_URL }}/ai/process",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "channel",
+              "value": "={{ $json.channel }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id || $json.from }}"
+            },
+            {
+              "name": "username",
+              "value": "={{ $json.username || $json.from_name }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.text || $json.subject }}"
+            },
+            {
+              "name": "attachments",
+              "value": "={{ JSON.stringify($json.attachments) }}"
+            },
+            {
+              "name": "context",
+              "value": "={{ JSON.stringify({ timestamp: $json.timestamp, message_id: $json.message_id || $json.email_id }) }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ai-orchestrator",
+      "name": "Enviar a AI Orchestrator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Merge Canales').item.json.channel }}",
+              "rightValue": "telegram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-telegram",
+      "name": "¿Es Telegram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Merge Canales').item.json.channel }}",
+              "rightValue": "email",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-email",
+      "name": "¿Es Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Merge Canales').item.json.chat_id }}",
+        "text": "={{ $('Enviar a AI Orchestrator').item.json.response || 'Procesado exitosamente' }}",
+        "additionalFields": {}
+      },
+      "id": "respond-telegram",
+      "name": "Responder por Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1340, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "bot@mesaya.com",
+        "toEmail": "={{ $('Merge Canales').item.json.from }}",
+        "subject": "Re: {{ $('Merge Canales').item.json.subject }}",
+        "emailType": "text",
+        "message": "={{ $('Enviar a AI Orchestrator').item.json.response || 'Tu mensaje ha sido procesado exitosamente.' }}",
+        "options": {}
+      },
+      "id": "respond-email",
+      "name": "Responder por Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de respuesta exitosa\nconst sourceChannel = $('Merge Canales').item.json;\nconst aiResponse = $('Enviar a AI Orchestrator').item.json;\n\nconsole.log(`Respuesta enviada por ${sourceChannel.channel} a usuario ${sourceChannel.username || sourceChannel.from}`);\n\nreturn {\n  success: true,\n  channel: sourceChannel.channel,\n  user: sourceChannel.username || sourceChannel.from,\n  ai_response: aiResponse.response,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "log-response",
+      "name": "Log Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Telegram Bot": {
+      "main": [
+        [
+          {
+            "node": "Extraer Contenido Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email IMAP": {
+      "main": [
+        [
+          {
+            "node": "Extraer Contenido Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Contenido Telegram": {
+      "main": [
+        [
+          {
+            "node": "Merge Canales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Contenido Email": {
+      "main": [
+        [
+          {
+            "node": "Merge Canales",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Canales": {
+      "main": [
+        [
+          {
+            "node": "Enviar a AI Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar a AI Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "¿Es Telegram?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "¿Es Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es Telegram?": {
+      "main": [
+        [
+          {
+            "node": "Responder por Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es Email?": {
+      "main": [
+        [
+          {
+            "node": "Responder por Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder por Telegram": {
+      "main": [
+        [
+          {
+            "node": "Log Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder por Email": {
+      "main": [
+        [
+          {
+            "node": "Log Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "versionId": "1",
+  "tags": [
+    {
+      "name": "mcp",
+      "createdAt": "2026-01-21T00:00:00.000Z",
+      "updatedAt": "2026-01-21T00:00:00.000Z"
+    },
+    {
+      "name": "ai",
+      "createdAt": "2026-01-21T00:00:00.000Z",
+      "updatedAt": "2026-01-21T00:00:00.000Z"
+    },
+    {
+      "name": "external-events",
+      "createdAt": "2026-01-21T00:00:00.000Z",
+      "updatedAt": "2026-01-21T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 2,
+  "active": false,
+  "meta": {
+    "instanceId": "mesaya-n8n"
+  }
+}

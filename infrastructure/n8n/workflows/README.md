@@ -8,14 +8,13 @@ Esta carpeta contiene los workflows de automatización de n8n para la plataforma
 
 ```
 workflows/
-├── payment-handler.json             # ⚡ OBLIGATORIO: Webhook de pasarela de pago
-├── partner-handler.json             # ⚡ OBLIGATORIO: Webhook de grupo partner con HMAC
-├── mcp-input-handler.json           # ⚡ OBLIGATORIO: Telegram/Email → AI Orchestrator
-├── daily-report.json                # ⚡ OBLIGATORIO: Tareas programadas (Scheduled Tasks)
-├── reservation-notification.json    # Notificación al crear reservación
-├── kafka-reservation-consumer.json  # Consumidor de eventos Kafka
-└── reservation-reminder-24h.json    # Recordatorio 24h antes
+├── payment-handler.json         # ⚡ OBLIGATORIO: Webhook de pasarela de pago
+├── partner-handler.json         # ⚡ OBLIGATORIO: Webhook de grupo partner con HMAC
+├── mcp-input-handler.json       # ⚡ OBLIGATORIO: Telegram/Email → AI Orchestrator
+└── daily-report.json            # ⚡ OBLIGATORIO: Tareas programadas (Scheduled Tasks)
 ```
+
+**Total: 4 workflows (todos obligatorios)**
 
 ## 🚀 Workflows OBLIGATORIOS (Event Bus Externo)
 

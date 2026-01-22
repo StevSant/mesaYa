@@ -7,11 +7,12 @@
 $CONTAINER_NAME = "mesaya-n8n"
 $WORKFLOWS_DIR = "/home/node/workflows"
 
-# Workflows a importar
+# Workflows a importar (TODOS los workflows obligatorios)
 $workflows = @(
     "payment-handler.json",
     "partner-handler.json",
-    "mcp-input-handler.json"
+    "mcp-input-handler.json",
+    "daily-report.json"
 )
 
 Write-Host "`n🚀 IMPORTACIÓN AUTOMATIZADA DE WORKFLOWS" -ForegroundColor Cyan
@@ -30,6 +31,27 @@ if (-not $containerStatus) {
 
 Write-Host "✅ Contenedor está corriendo`n" -ForegroundColor Green
 
+# Listar workflows existentes en n8n para evitar duplicados
+Write-Host "🔍 Verificando workflows ya importados en n8n..." -ForegroundColor Yellow
+$existingWorkflowsOutput = docker exec $CONTAINER_NAME n8n list:workflow 2>&1
+$existingWorkflowNames = @()
+
+if ($existingWorkflowsOutput) {
+    # Parsear nombres de workflows existentes
+    $existingWorkflowsOutput | ForEach-Object {
+        if ($_ -match "MesaYA - (.+)") {
+            $existingWorkflowNames += "MesaYA - $($matches[1])"
+        }
+    }
+}
+
+if ($existingWorkflowNames.Count -gt 0) {
+    Write-Host "   📋 Encontrados $($existingWorkflowNames.Count) workflows ya importados" -ForegroundColor Gray
+} else {
+    Write-Host "   📋 No hay workflows importados aún" -ForegroundColor Gray
+}
+Write-Host ""
+
 # Listar workflows en el contenedor
 Write-Host "📁 Workflows disponibles en el contenedor:" -ForegroundColor Cyan
 docker exec $CONTAINER_NAME ls -1 $WORKFLOWS_DIR 2>$null | ForEach-Object {
@@ -39,12 +61,28 @@ Write-Host ""
 
 $successCount = 0
 $errorCount = 0
+$skippedCount = 0
 $importedWorkflows = @()
+
+# Mapeo de archivos a nombres de workflows
+$workflowNames = @{
+    "payment-handler.json" = "MesaYA - Payment Handler"
+    "partner-handler.json" = "MesaYA - Partner Handler"
+    "mcp-input-handler.json" = "MesaYA - MCP Input Handler"
+    "daily-report.json" = "MesaYA - Reporte Diario de Reservaciones"
+}
 
 foreach ($workflow in $workflows) {
     $filePath = "$WORKFLOWS_DIR/$workflow"
+    $workflowName = $workflowNames[$workflow]
 
-    Write-Host "📤 Importando: $workflow..." -ForegroundColor Cyan
+    # Verificar si el workflow ya existe
+    if ($existingWorkflowNames -contains $workflowName) {
+        Write-Host "⏭️  Saltando: $workflow" -ForegroundColor Yellow
+        Write-Host "   (ya existe '$workflowName')`n" -ForegroundColor Gray
+        $skippedCount++
+        continue
+    }
 
     # Ejecutar importación en el contenedor
     $output = docker exec $CONTAINER_NAME n8n import:workflow --input=$filePath 2>&1
@@ -72,6 +110,7 @@ Write-Host "━━━━━━━━━━━━━━━━━━━━━━�
 Write-Host "📊 RESUMEN DE IMPORTACIÓN" -ForegroundColor Cyan
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Gray
 Write-Host "   ✅ Importados: $successCount" -ForegroundColor Green
+Write-Host "   ⏭️  Saltados (ya existían): $skippedCount" -ForegroundColor Yellow
 Write-Host "   ❌ Errores: $errorCount`n" -ForegroundColor $(if ($errorCount -gt 0) { "Red" } else { "Gray" })
 
 if ($successCount -gt 0) {
@@ -80,7 +119,11 @@ if ($successCount -gt 0) {
     foreach ($w in $importedWorkflows) {
         Write-Host "   ✓ $w" -ForegroundColor White
     }
-    Write-Host ""
+  elseif ($skippedCount -gt 0 -and $errorCount -eq 0 -and $successCount -eq 0) {
+    Write-Host "ℹ️  TODOS LOS WORKFLOWS YA ESTÁN IMPORTADOS`n" -ForegroundColor Cyan
+    Write-Host "No se importó nada porque todos ya existen en n8n." -ForegroundColor Gray
+    Write-Host "Si necesitas reimportarlos, elimínalos primero desde la UI de n8n.`n" -ForegroundColor Gray
+}   Write-Host ""
 }
 
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan

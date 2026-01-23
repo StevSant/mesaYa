@@ -17,13 +17,30 @@
     },
     {
       "parameters": {
-        "jsCode": "// Validar payload del webhook de pago\n// El payload puede venir directamente o anidado bajo 'body'\nconst input = $input.first().json;\nconst payload = input.body || input;\n\n// Debug: log del payload recibido\nconsole.log('Payload recibido:', JSON.stringify(payload, null, 2));\n\n// Extraer campos con fallbacks robustos\nconst payment_id = payload.payment_id || payload.paymentId || null;\nconst status = payload.status || null;\nconst amount = (payload.amount !== undefined && payload.amount !== null) ? Number(payload.amount) : null;\nconst currency = payload.currency || 'USD';\nlet metadata = payload.metadata || {};\n\n// Si metadata es string, parsearlo\nif (typeof metadata === 'string') {\n  try {\n    metadata = JSON.parse(metadata);\n  } catch (e) {\n    metadata = {};\n  }\n}\n\n// Validar solo campos críticos\nconst missing = [];\nif (!payment_id) missing.push('payment_id');\nif (!status) missing.push('status');\nif (amount === null || isNaN(amount)) missing.push('amount');\n\n// metadata es opcional, usamos defaults\nif (missing.length > 0) {\n  throw new Error(`Campos faltantes: ${missing.join(', ')}. Payload: ${JSON.stringify(payload).substring(0, 500)}`);\n}\n\n// Validar status\nconst validStatuses = ['approved', 'pending', 'rejected', 'refunded', 'succeeded', 'failed'];\nif (!validStatuses.includes(status)) {\n  throw new Error(`Status inválido: ${status}. Válidos: ${validStatuses.join(', ')}`);\n}\n\nconst reservation_id = metadata.reservation_id || 'unknown';\nconst service_type = metadata.service_type || 'reservation';\n\nreturn {\n  payment_id: payment_id,\n  status: status,\n  amount: amount,\n  currency: currency,\n  payment_method: payload.payment_method || 'card',\n  transaction_id: payload.transaction_id || null,\n  reservation_id: reservation_id,\n  service_type: service_type,\n  customer_email: metadata.customer_email || '',\n  customer_name: metadata.customer_name || '',\n  timestamp: payload.created_at || new Date().toISOString(),\n  raw_payload: payload\n};"
+        "jsCode": "// Validar payload del webhook de pago\n// El payload puede venir directamente o anidado bajo 'body'\nconst input = $input.first().json;\nconst payload = input.body || input;\n\n// Debug: log del payload recibido\nconsole.log('Payload recibido:', JSON.stringify(payload, null, 2));\n\n// Extraer campos con fallbacks robustos\nconst payment_id = payload.payment_id || payload.paymentId || null;\nconst status = payload.status || null;\nconst amount = (payload.amount !== undefined && payload.amount !== null) ? Number(payload.amount) : null;\nconst currency = payload.currency || 'USD';\nlet metadata = payload.metadata || {};\n\n// Si metadata es string, parsearlo\nif (typeof metadata === 'string') {\n  try {\n    metadata = JSON.parse(metadata);\n  } catch (e) {\n    metadata = {};\n  }\n}\n\n// Validar solo campos críticos\nconst missing = [];\nif (!payment_id) missing.push('payment_id');\nif (!status) missing.push('status');\nif (amount === null || isNaN(amount)) missing.push('amount');\n\n// metadata es opcional, usamos defaults\nif (missing.length > 0) {\n  throw new Error(`Campos faltantes: ${missing.join(', ')}. Payload: ${JSON.stringify(payload).substring(0, 500)}`);\n}\n\n// Validar status (case-insensitive)\nconst validStatuses = ['approved', 'pending', 'rejected', 'refunded', 'succeeded', 'failed', 'processing'];\nconst normalizedStatus = status.toLowerCase();\nif (!validStatuses.includes(normalizedStatus)) {\n  throw new Error(`Status inválido: ${status}. Válidos: ${validStatuses.join(', ')}`);\n}\n\nconst reservation_id = metadata.reservation_id || payload.reservation_id || null;\nconst service_type = metadata.type || metadata.service_type || 'reservation';\nconst user_id = metadata.user_id || payload.user_id || '';\n\n// Verificar que tenemos reservation_id\nif (!reservation_id || reservation_id === 'unknown') {\n  throw new Error(`reservation_id es requerido. Payload: ${JSON.stringify(payload).substring(0, 500)}`);\n}\n\nreturn {\n  payment_id: payment_id,\n  status: normalizedStatus,\n  original_status: status,\n  amount: amount,\n  currency: currency,\n  payment_method: payload.payment_method || 'card',\n  transaction_id: payload.transaction_id || null,\n  reservation_id: reservation_id,\n  service_type: service_type,\n  user_id: user_id,\n  customer_email: metadata.customer_email || '',\n  customer_name: metadata.customer_name || '',\n  timestamp: payload.created_at || payload.timestamp || new Date().toISOString(),\n  raw_payload: payload\n};"
       },
       "id": "validate-payload",
       "name": "Validar Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $vars.MESAYA_API_URL }}/api/v1/payments/n8n/payment-status",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"payment_id\": \"{{ $json.payment_id }}\",\n  \"reservation_id\": \"{{ $json.reservation_id }}\",\n  \"payment_status\": \"{{ $json.status }}\",\n  \"amount\": {{ $json.amount }},\n  \"currency\": \"{{ $json.currency }}\",\n  \"transaction_id\": {{ $json.transaction_id ? '\"' + $json.transaction_id + '\"' : 'null' }}\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "update-backend-status",
+      "name": "Actualizar Estado en Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 400]
     },
     {
       "parameters": {
@@ -35,164 +52,76 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $json.status }}",
+              "leftValue": "={{ $('Validar Payload').item.json.status }}",
               "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $('Validar Payload').item.json.status }}",
+              "rightValue": "succeeded",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $('Validar Payload').item.json.status }}",
+              "rightValue": "processing",
               "operator": {
                 "type": "string",
                 "operation": "equals"
               }
             }
           ],
-          "combinator": "and"
+          "combinator": "or"
         },
         "options": {}
       },
-      "id": "filter-approved",
-      "name": "Filtrar Aprobados",
+      "id": "filter-confirmed",
+      "name": "¿Pago Confirmado o Procesando?",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2,
-      "position": [680, 400]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $vars.MESAYA_API_URL }}/api/v1/payments",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "payment_id",
-              "value": "={{ $json.payment_id }}"
-            },
-            {
-              "name": "reservation_id",
-              "value": "={{ $json.reservation_id }}"
-            },
-            {
-              "name": "status",
-              "value": "={{ $json.status }}"
-            },
-            {
-              "name": "amount",
-              "value": "={{ $json.amount }}"
-            },
-            {
-              "name": "currency",
-              "value": "={{ $json.currency }}"
-            },
-            {
-              "name": "transaction_id",
-              "value": "={{ $json.transaction_id }}"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "activate-service",
-      "name": "Activar Servicio/Reserva",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [900, 300]
+      "position": [940, 300]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $vars.MESAYA_WS_URL }}/broadcast",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "event",
-              "value": "payment.confirmed"
-            },
-            {
-              "name": "reservation_id",
-              "value": "={{ $json.reservation_id }}"
-            },
-            {
-              "name": "payment_id",
-              "value": "={{ $json.payment_id }}"
-            },
-            {
-              "name": "amount",
-              "value": "={{ $json.amount }}"
-            },
-            {
-              "name": "timestamp",
-              "value": "={{ $json.timestamp }}"
-            }
-          ]
-        },
-        "options": {}
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event\": \"payment.{{ $('Validar Payload').item.json.status }}\",\n  \"reservation_id\": \"{{ $('Validar Payload').item.json.reservation_id }}\",\n  \"payment_id\": \"{{ $('Validar Payload').item.json.payment_id }}\",\n  \"status\": \"{{ $('Validar Payload').item.json.status }}\",\n  \"amount\": {{ $('Validar Payload').item.json.amount }},\n  \"timestamp\": \"{{ $('Validar Payload').item.json.timestamp }}\"\n}",
+        "options": {
+          "timeout": 5000
+        }
       },
       "id": "notify-websocket",
       "name": "Notificar vía WebSocket",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 500]
+      "position": [940, 500]
     },
     {
       "parameters": {
         "fromEmail": "pagos@mesaya.com",
-        "toEmail": "={{ $json.customer_email }}",
-        "subject": "✅ Pago Confirmado - MesaYA",
+        "toEmail": "bryanpiguave7@gmail.com",
+        "subject": "={{ $('Validar Payload').item.json.status === 'processing' ? '⏳ Pago en Proceso' : '✅ Pago Confirmado' }} - MesaYA",
         "emailType": "html",
-        "html": "<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n    .header { background: #10B981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }\n    .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }\n    .info-row { margin: 10px 0; padding: 10px; background: white; border-radius: 4px; }\n    .label { font-weight: bold; color: #6B7280; }\n    .value { color: #111827; }\n    .amount { font-size: 24px; color: #10B981; font-weight: bold; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>💳 Pago Confirmado</h1>\n    </div>\n    <div class=\"content\">\n      <p>Hola <strong>{{ $json.customer_name }}</strong>,</p>\n      <p>Tu pago ha sido procesado exitosamente.</p>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">💰 Monto:</span>\n        <span class=\"amount\">{{ $json.currency }} {{ $json.amount }}</span>\n      </div>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">📝 ID de Pago:</span>\n        <span class=\"value\">{{ $json.payment_id }}</span>\n      </div>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">🎫 ID de Reservación:</span>\n        <span class=\"value\">{{ $json.reservation_id }}</span>\n      </div>\n      \n      <div class=\"info-row\">\n        <span class=\"label\">📅 Fecha:</span>\n        <span class=\"value\">{{ $json.timestamp }}</span>\n      </div>\n      \n      <p style=\"margin-top: 20px;\">Tu reservación está confirmada. ¡Nos vemos pronto!</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "html": "={{ (function() { const status = $('Validar Payload').item.json.status; const isProcessing = status === 'processing'; const headerGradient = isProcessing ? 'linear-gradient(135deg,#f59e0b 0%,#d97706 100%)' : 'linear-gradient(135deg,#10b981 0%,#059669 100%)'; const primaryColor = isProcessing ? '#f59e0b' : '#10b981'; const darkColor = isProcessing ? '#d97706' : '#059669'; const bgLight = isProcessing ? '#fef3c7' : '#dcfce7'; const bgGradient = isProcessing ? 'linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)' : 'linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%)'; const textDark = isProcessing ? '#92400e' : '#166534'; const icon = isProcessing ? '⏳' : '💳'; const title = isProcessing ? '¡Pago en Proceso!' : '¡Pago Confirmado!'; const subtitle = isProcessing ? 'Tu transacción está siendo procesada' : 'Tu transacción ha sido procesada exitosamente'; const badge = isProcessing ? '⏳ Procesando Pago' : '✓ Transacción Completada'; const amountLabel = isProcessing ? 'Monto a Procesar' : 'Monto Total Pagado'; const nextSteps = isProcessing ? '<li>Tu pago está siendo verificado por el banco</li><li>Recibirás una confirmación en unos minutos</li><li>No cierres esta ventana ni realices otro pago</li><li>Si no recibes confirmación en 10 minutos, contáctanos</li>' : '<li>Tu reservación ha sido confirmada automáticamente</li><li>Recibirás un recordatorio antes de tu visita</li><li>Presenta este correo o tu ID de reservación al llegar</li><li>Si necesitas modificar tu reservación, hazlo con anticipación</li>'; return '<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"><title>Pago - MesaYA</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;line-height:1.6;color:#334155;background-color:#f8fafc;padding:20px}.email-wrapper{max-width:600px;margin:0 auto;background-color:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(15,23,42,.08)}.header{background:' + headerGradient + ';color:#fff;padding:40px 30px;text-align:center}.header-icon{font-size:64px;margin-bottom:16px}.header h1{font-size:28px;font-weight:700;margin-bottom:8px;color:#fff}.header p{font-size:16px;opacity:.95;font-weight:400}.content{padding:40px 30px}.success-badge{display:inline-flex;align-items:center;background:' + bgLight + ';color:' + textDark + ';padding:8px 16px;border-radius:20px;font-size:14px;font-weight:600;margin-bottom:24px}.success-badge-icon{margin-right:8px}.amount-card{background:' + bgGradient + ';border:2px solid ' + primaryColor + ';border-radius:12px;padding:30px;text-align:center;margin-bottom:30px}.amount-label{color:' + textDark + ';font-size:14px;font-weight:500;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}.amount-value{font-size:48px;font-weight:700;color:' + darkColor + ';line-height:1.2}.amount-currency{font-size:24px;font-weight:500;color:' + primaryColor + ';margin-right:4px}.details-grid{display:grid;gap:16px;margin-bottom:30px}.detail-row{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;background:#f8fafc;border-radius:8px;border-left:4px solid ' + primaryColor + '}.detail-label{display:flex;align-items:center;color:#64748b;font-size:14px;font-weight:500}.detail-label-icon{margin-right:10px;font-size:18px}.detail-value{color:#0f172a;font-size:14px;font-weight:600;text-align:right;word-break:break-all;max-width:60%}.divider{height:1px;background:#e2e8f0;margin:30px 0}.next-steps{background:' + bgLight + ';border-radius:8px;padding:24px;margin-bottom:30px}.next-steps h3{color:' + textDark + ';font-size:16px;font-weight:600;margin-bottom:12px;display:flex;align-items:center}.next-steps h3 span{margin-right:8px}.next-steps-list{list-style:none;padding:0}.next-steps-list li{color:#334155;font-size:14px;padding:8px 0;padding-left:24px;position:relative}.next-steps-list li:before{content:\"✓\";position:absolute;left:0;color:' + primaryColor + ';font-weight:bold}.cta-button{display:block;width:100%;padding:16px 28px;background:' + primaryColor + ';color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px;text-align:center;transition:background .2s;margin-bottom:16px}.cta-button:hover{background:' + darkColor + '}.cta-secondary{display:block;width:100%;padding:14px 28px;background:#fff;color:' + primaryColor + ';text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;text-align:center;border:2px solid ' + primaryColor + ';transition:all .2s}.footer{background:#f8fafc;padding:30px;text-align:center;border-top:1px solid #e2e8f0}.footer-logo{font-size:24px;font-weight:700;color:' + primaryColor + ';margin-bottom:12px}.footer p{color:#64748b;font-size:13px;margin-bottom:6px}.footer-note{margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8}@media only screen and (max-width:600px){.email-wrapper{border-radius:0}.header{padding:30px 20px}.content{padding:30px 20px}.amount-value{font-size:36px}.detail-row{flex-direction:column;align-items:flex-start;gap:8px}.detail-value{text-align:left;max-width:100%}}</style></head><body><div class=\"email-wrapper\"><div class=\"header\"><div class=\"header-icon\">' + icon + '</div><h1>' + title + '</h1><p>' + subtitle + '</p></div><div class=\"content\"><div style=\"text-align:center\"><span class=\"success-badge\"><span class=\"success-badge-icon\">' + (isProcessing ? '⏳' : '✓') + '</span> ' + badge + '</span></div><div class=\"amount-card\"><div class=\"amount-label\">' + amountLabel + '</div><div class=\"amount-value\"><span class=\"amount-currency\">' + $('Validar Payload').item.json.currency.toUpperCase() + '</span>' + $('Validar Payload').item.json.amount + '</div></div><div class=\"details-grid\"><div class=\"detail-row\"><span class=\"detail-label\"><span class=\"detail-label-icon\">🧾</span>ID de Pago</span><span class=\"detail-value\">' + $('Validar Payload').item.json.payment_id + '</span></div><div class=\"detail-row\"><span class=\"detail-label\"><span class=\"detail-label-icon\">🎫</span>ID de Reservación</span><span class=\"detail-value\">' + $('Validar Payload').item.json.reservation_id + '</span></div><div class=\"detail-row\"><span class=\"detail-label\"><span class=\"detail-label-icon\">💳</span>Método de Pago</span><span class=\"detail-value\">' + $('Validar Payload').item.json.payment_method.charAt(0).toUpperCase() + $('Validar Payload').item.json.payment_method.slice(1) + '</span></div><div class=\"detail-row\"><span class=\"detail-label\"><span class=\"detail-label-icon\">📅</span>Fecha y Hora</span><span class=\"detail-value\">' + new Date($('Validar Payload').item.json.timestamp).toLocaleString('es-EC', { dateStyle: 'long', timeStyle: 'short' }) + '</span></div></div><div class=\"divider\"></div><div class=\"next-steps\"><h3><span>📋</span> Próximos Pasos</h3><ul class=\"next-steps-list\">' + nextSteps + '</ul></div><a href=\"#\" class=\"cta-button\">Ver Detalles de Reservación</a><a href=\"#\" class=\"cta-secondary\">Contactar Soporte</a></div><div class=\"footer\"><div class=\"footer-logo\">MesaYA</div><p>Sistema de Gestión de Reservaciones</p><p>Gracias por confiar en nosotros</p><div class=\"footer-note\">Este es un correo automático. Si no realizaste esta transacción, por favor contáctanos inmediatamente.</div></div></div></body></html>'; })() }}",
         "options": {}
       },
       "id": "send-confirmation-email",
-      "name": "Enviar Email Confirmación",
+      "name": "Enviar Email Pago",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [1120, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $vars.PARTNER_WEBHOOK_URL || 'https://partner.example.com/webhook' }}",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "event_type",
-              "value": "payment.confirmed"
-            },
-            {
-              "name": "payment_id",
-              "value": "={{ $json.payment_id }}"
-            },
-            {
-              "name": "reservation_id",
-              "value": "={{ $json.reservation_id }}"
-            },
-            {
-              "name": "amount",
-              "value": "={{ $json.amount }}"
-            },
-            {
-              "name": "currency",
-              "value": "={{ $json.currency }}"
-            },
-            {
-              "name": "timestamp",
-              "value": "={{ $json.timestamp }}"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "id": "partner-webhook",
-      "name": "Webhook a Grupo Partner",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1120, 500]
+      "position": [1180, 300]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: true, payment_id: $json.payment_id, status: 'processed' }) }}",
+        "responseBody": "={{ JSON.stringify({ success: true, payment_id: $('Validar Payload').item.json.payment_id, reservation_id: $('Validar Payload').item.json.reservation_id, status: $('Validar Payload').item.json.status, message: 'Payment event processed' }) }}",
         "options": {
           "responseCode": 200
         }
@@ -201,12 +130,12 @@
       "name": "Responder OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1340, 400]
+      "position": [1180, 500]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: false, error: $json.error || 'Payment not approved', payment_id: $json.payment_id }) }}",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.error || 'Validation error' }) }}",
         "options": {
           "responseCode": 400
         }
@@ -215,7 +144,7 @@
       "name": "Responder Error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [680, 600]
+      "position": [460, 600]
     }
   ],
   "connections": {
@@ -234,18 +163,18 @@
       "main": [
         [
           {
-            "node": "Filtrar Aprobados",
+            "node": "Actualizar Estado en Backend",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Filtrar Aprobados": {
+    "Actualizar Estado en Backend": {
       "main": [
         [
           {
-            "node": "Activar Servicio/Reserva",
+            "node": "¿Pago Confirmado o Procesando?",
             "type": "main",
             "index": 0
           },
@@ -254,39 +183,21 @@
             "type": "main",
             "index": 0
           }
-        ],
-        [
-          {
-            "node": "Responder Error",
-            "type": "main",
-            "index": 0
-          }
         ]
       ]
     },
-    "Activar Servicio/Reserva": {
+    "¿Pago Confirmado o Procesando?": {
       "main": [
         [
           {
-            "node": "Enviar Email Confirmación",
+            "node": "Enviar Email Pago",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Notificar vía WebSocket": {
-      "main": [
-        [
-          {
-            "node": "Webhook a Grupo Partner",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Enviar Email Confirmación": {
+    "Enviar Email Pago": {
       "main": [
         [
           {
@@ -297,7 +208,7 @@
         ]
       ]
     },
-    "Webhook a Grupo Partner": {
+    "Notificar vía WebSocket": {
       "main": [
         [
           {
@@ -313,7 +224,7 @@
     "executionOrder": "v1"
   },
   "staticData": null,
-  "versionId": "1",
+  "versionId": "3",
   "tags": [
     {
       "name": "payment",

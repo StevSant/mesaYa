@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MesaYA Partner Demo - B2B Webhooks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .event-card {
+        transition: all 0.3s ease;
+      }
+      .event-card:hover {
+        transform: translateY(-2px);
+      }
+      .pulse {
+        animation: pulse 2s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .status-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .status-online {
+        background: #22c55e;
+      }
+      .status-offline {
+        background: #ef4444;
+      }
+      .status-unknown {
+        background: #eab308;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-900 text-white min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 py-4">
+      <div class="container mx-auto px-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <h1 class="text-2xl font-bold text-orange-400">
+              🤝 MesaYA Partner Demo
+            </h1>
+            <span class="text-sm text-gray-400"
+              >B2B Webhook Interoperability</span
+            >
+          </div>
+          <div class="flex items-center gap-4">
+            <div
+              id="partner-status"
+              class="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-700"
+            >
+              <span
+                class="status-dot {{ 'status-online' if partner_registered else 'status-offline' }}"
+              ></span>
+              <span class="text-sm"
+                >{{ 'Registrado' if partner_registered else 'No registrado'
+                }}</span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-8">
+      <!-- Stats Row -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+          <div class="text-3xl font-bold text-blue-400">
+            {{ stats.total_received }}
+          </div>
+          <div class="text-sm text-gray-400">Webhooks Recibidos</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+          <div class="text-3xl font-bold text-green-400">
+            {{ stats.received_verified }}
+          </div>
+          <div class="text-sm text-gray-400">Verificados ✓</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+          <div class="text-3xl font-bold text-purple-400">
+            {{ stats.total_sent }}
+          </div>
+          <div class="text-sm text-gray-400">Webhooks Enviados</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+          <div class="text-3xl font-bold text-orange-400">
+            {{ stats.sent_success }}
+          </div>
+          <div class="text-sm text-gray-400">Enviados Exitosos</div>
+        </div>
+      </div>
+
+      <!-- Main Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Panel - Actions -->
+        <div class="space-y-6">
+          <!-- Registration Card -->
+          <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+              📝 Registro de Partner
+            </h2>
+
+            {% if partner_registered %}
+            <div
+              class="bg-green-900/30 border border-green-600 rounded-lg p-4 mb-4"
+            >
+              <div class="flex items-center gap-2 text-green-400 mb-2">
+                <span>✅ Registrado como Partner</span>
+              </div>
+              <div class="text-sm text-gray-300 space-y-1">
+                <p>
+                  <strong>ID:</strong>
+                  <code class="text-xs bg-gray-700 px-1 rounded"
+                    >{{ partner_id[:8] }}...</code
+                  >
+                </p>
+                <p><strong>Desde:</strong> {{ registered_at }}</p>
+              </div>
+            </div>
+            {% else %}
+            <form id="register-form" class="space-y-4">
+              <div>
+                <label class="block text-sm text-gray-400 mb-1"
+                  >URL de MesaYA (Backend)</label
+                >
+                <input
+                  type="text"
+                  name="mesa_ya_url"
+                  value="http://localhost:3000"
+                  class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                />
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1"
+                  >Eventos a suscribir</label
+                >
+                <div class="space-y-1 text-sm">
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="events"
+                      value="payment.created"
+                      checked
+                      class="rounded"
+                    />
+                    payment.created
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="events"
+                      value="payment.succeeded"
+                      checked
+                      class="rounded"
+                    />
+                    payment.succeeded
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="events"
+                      value="payment.failed"
+                      checked
+                      class="rounded"
+                    />
+                    payment.failed
+                  </label>
+                </div>
+              </div>
+              <button
+                type="submit"
+                class="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-4 rounded transition"
+              >
+                🔗 Registrar como Partner
+              </button>
+            </form>
+            {% endif %}
+          </div>
+
+          <!-- Send Event Card -->
+          <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+              📤 Enviar Evento a MesaYA
+            </h2>
+            <p class="text-sm text-gray-400 mb-4">
+              Simula enviar un webhook de vuelta a MesaYA para demostrar
+              comunicación bidireccional.
+            </p>
+
+            <div class="space-y-3">
+              <button
+                onclick="
+                  sendEvent('partner.order.ready', {
+                    order_id: 'ORD-' + Date.now(),
+                    status: 'ready',
+                  })
+                "
+                class="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded text-sm transition flex items-center justify-center gap-2"
+              >
+                🍽️ Pedido Listo
+              </button>
+              <button
+                onclick="
+                  sendEvent('partner.inventory.low', {
+                    item: 'Pizza Margherita',
+                    current: 2,
+                    threshold: 5,
+                  })
+                "
+                class="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-4 rounded text-sm transition flex items-center justify-center gap-2"
+              >
+                ⚠️ Stock Bajo
+              </button>
+              <button
+                onclick="
+                  sendEvent('partner.promotion.active', {
+                    code: 'DEMO20',
+                    discount: '20%',
+                    valid_until: '2026-02-01',
+                  })
+                "
+                class="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded text-sm transition flex items-center justify-center gap-2"
+              >
+                🎉 Nueva Promoción
+              </button>
+              <button
+                onclick="
+                  sendEvent('partner.custom', {
+                    message: 'Evento de prueba',
+                    timestamp: new Date().toISOString(),
+                  })
+                "
+                class="w-full bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded text-sm transition flex items-center justify-center gap-2"
+              >
+                🧪 Evento de Prueba
+              </button>
+            </div>
+          </div>
+
+          <!-- Connection Status -->
+          <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+              🔌 Estado de Conexión
+            </h2>
+            <div id="connection-status" class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-sm">mesaYA_Res</span>
+                <span class="status-dot status-unknown pulse"></span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-sm">mesaYA_payment</span>
+                <span class="status-dot status-unknown pulse"></span>
+              </div>
+            </div>
+            <button
+              onclick="checkHealth()"
+              class="mt-4 w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded text-sm transition"
+            >
+              🔄 Verificar Conexión
+            </button>
+          </div>
+        </div>
+
+        <!-- Middle Panel - Received Events -->
+        <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold flex items-center gap-2">
+              📥 Webhooks Recibidos
+            </h2>
+            <button
+              onclick="refreshEvents()"
+              class="text-sm text-gray-400 hover:text-white"
+            >
+              🔄 Actualizar
+            </button>
+          </div>
+
+          <div
+            id="received-events"
+            class="space-y-3 max-h-[600px] overflow-y-auto"
+          >
+            {% if received_events %} {% for event in received_events %}
+            <div
+              class="event-card bg-gray-700/50 rounded-lg p-4 border border-gray-600"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-blue-400"
+                  >{{ event.event_type }}</span
+                >
+                <span
+                  class="text-xs px-2 py-0.5 rounded {% if event.status == 'verified' %}bg-green-600 {% elif event.status == 'invalid_signature' %}bg-red-600 {% else %}bg-gray-600{% endif %}"
+                >
+                  {{ event.status }}
+                </span>
+              </div>
+              <div class="text-xs text-gray-400 mb-2">
+                {{ event.timestamp }}
+              </div>
+              <pre class="text-xs bg-gray-800 p-2 rounded overflow-x-auto">
+{{ event.payload | tojson(indent=2) }}</pre
+              >
+            </div>
+            {% endfor %} {% else %}
+            <div class="text-center text-gray-500 py-8">
+              <div class="text-4xl mb-2">📭</div>
+              <p>No hay webhooks recibidos aún</p>
+              <p class="text-sm mt-2">
+                Crea un pago en MesaYA para ver los eventos aquí
+              </p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Right Panel - Sent Events -->
+        <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            📤 Webhooks Enviados
+          </h2>
+
+          <div id="sent-events" class="space-y-3 max-h-[600px] overflow-y-auto">
+            {% if sent_events %} {% for event in sent_events %}
+            <div
+              class="event-card bg-gray-700/50 rounded-lg p-4 border border-gray-600"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-purple-400"
+                  >{{ event.event_type }}</span
+                >
+                <span
+                  class="text-xs px-2 py-0.5 rounded {% if event.success %}bg-green-600{% else %}bg-red-600{% endif %}"
+                >
+                  {{ 'Exitoso' if event.success else 'Error' }}
+                </span>
+              </div>
+              <div class="text-xs text-gray-400 mb-2">
+                {{ event.timestamp }}
+              </div>
+              <div class="text-xs text-gray-500 mb-2">
+                → {{ event.target_url }}
+              </div>
+              {% if event.error_message %}
+              <div class="text-xs text-red-400 mb-2">
+                {{ event.error_message }}
+              </div>
+              {% endif %}
+              <pre class="text-xs bg-gray-800 p-2 rounded overflow-x-auto">
+{{ event.payload | tojson(indent=2) }}</pre
+              >
+            </div>
+            {% endfor %} {% else %}
+            <div class="text-center text-gray-500 py-8">
+              <div class="text-4xl mb-2">📤</div>
+              <p>No hay webhooks enviados aún</p>
+              <p class="text-sm mt-2">
+                Usa los botones de la izquierda para enviar eventos
+              </p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="mt-8 bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <h3 class="text-lg font-semibold mb-4">
+          📚 Información del Pilar 2: Webhooks e Interoperabilidad B2B
+        </h3>
+        <div
+          class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-300"
+        >
+          <div>
+            <h4 class="font-medium text-white mb-2">
+              ✅ Componentes Implementados:
+            </h4>
+            <ul class="list-disc list-inside space-y-1">
+              <li>Registro de Partners con API REST</li>
+              <li>Generación de secret compartido HMAC</li>
+              <li>Verificación HMAC-SHA256 de webhooks</li>
+              <li>Comunicación bidireccional de eventos</li>
+            </ul>
+          </div>
+          <div>
+            <h4 class="font-medium text-white mb-2">🔐 Autenticación HMAC:</h4>
+            <code class="block bg-gray-700 p-2 rounded text-xs">
+              X-Webhook-Signature: t=timestamp,v1=hmac-sha256(secret,
+              timestamp.payload)
+            </code>
+            <p class="mt-2 text-xs text-gray-400">
+              Todos los webhooks son firmados y verificados con HMAC-SHA256 para
+              garantizar autenticidad e integridad.
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div
+      id="toast-container"
+      class="fixed bottom-4 right-4 space-y-2 z-50"
+    ></div>
+
+    <script>
+      // Show toast notification
+      function showToast(message, type = "info") {
+        const container = document.getElementById("toast-container");
+        const toast = document.createElement("div");
+
+        const colors = {
+          success: "bg-green-600",
+          error: "bg-red-600",
+          info: "bg-blue-600",
+          warning: "bg-yellow-600",
+        };
+
+        toast.className = `${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg transition-all transform translate-x-full`;
+        toast.innerHTML = message;
+        container.appendChild(toast);
+
+        // Animate in
+        setTimeout(() => toast.classList.remove("translate-x-full"), 10);
+
+        // Remove after 3s
+        setTimeout(() => {
+          toast.classList.add("translate-x-full");
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+
+      // Register as partner
+      document
+        .getElementById("register-form")
+        ?.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const form = e.target;
+          const mesaYaUrl = form.mesa_ya_url.value;
+          const events = Array.from(
+            form.querySelectorAll('input[name="events"]:checked'),
+          ).map((cb) => cb.value);
+
+          try {
+            const response = await fetch("/api/register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mesa_ya_url: mesaYaUrl, events }),
+            });
+
+            const data = await response.json();
+            if (data.success) {
+              showToast("✅ Registrado como partner exitosamente!", "success");
+              setTimeout(() => location.reload(), 1000);
+            } else {
+              showToast(
+                "❌ Error: " + (data.error || "No se pudo registrar"),
+                "error",
+              );
+            }
+          } catch (err) {
+            showToast("❌ Error de conexión", "error");
+          }
+        });
+
+      // Send event to MesaYA
+      async function sendEvent(eventType, data) {
+        try {
+          const response = await fetch("/api/send-event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ event_type: eventType, data }),
+          });
+
+          const result = await response.json();
+          if (result.success) {
+            showToast(`📤 Evento "${eventType}" enviado!`, "success");
+            refreshEvents();
+          } else {
+            showToast(
+              "❌ Error: " + (result.error_message || "No se pudo enviar"),
+              "error",
+            );
+          }
+        } catch (err) {
+          showToast("❌ Error de conexión", "error");
+        }
+      }
+
+      // Check MesaYA health
+      async function checkHealth() {
+        try {
+          const response = await fetch("/api/health-check");
+          const data = await response.json();
+
+          const container = document.getElementById("connection-status");
+          container.innerHTML = "";
+
+          for (const [service, info] of Object.entries(data)) {
+            const statusClass =
+              info.status === "online" ? "status-online" : "status-offline";
+            container.innerHTML += `
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm">${service}</span>
+                            <span class="status-dot ${statusClass}"></span>
+                        </div>
+                    `;
+          }
+
+          showToast("🔄 Estado actualizado", "info");
+        } catch (err) {
+          showToast("❌ Error verificando conexión", "error");
+        }
+      }
+
+      // Refresh events
+      async function refreshEvents() {
+        try {
+          const response = await fetch("/api/events");
+          const data = await response.json();
+          location.reload(); // Simple refresh for now
+        } catch (err) {
+          console.error("Error refreshing events:", err);
+        }
+      }
+
+      // Auto-refresh every 10 seconds
+      setInterval(refreshEvents, 10000);
+
+      // Check health on load
+      checkHealth();
+    </script>
+  </body>
+</html>
